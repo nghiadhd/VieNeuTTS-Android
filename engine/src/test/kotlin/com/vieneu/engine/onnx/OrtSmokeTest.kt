@@ -11,7 +11,7 @@ class OrtSmokeTest {
     @Test
     fun loadsPrefillGraph() {
         val env = OrtEnvironment.getEnvironment()
-        val session = env.createSession("src/main/assets/onnx_int8/vieneu_prefill.onnx", OrtSession.SessionOptions())
+        val session = env.createSession("src/main/assets/onnx_update/vieneu_prefill.onnx", OrtSession.SessionOptions())
         assertTrue(session.inputNames.contains("inputs_embeds"))
         session.close()
     }

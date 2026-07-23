@@ -14,7 +14,7 @@ import org.junit.Test
  */
 class BpeTokenizerTest {
     private val tokenizer by lazy {
-        val json = File("src/main/assets/onnx_int8/tokenizer.json").readText()
+        val json = File("src/main/assets/onnx_update/tokenizer.json").readText()
         BpeTokenizer.fromJson(json)
     }
 

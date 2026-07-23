@@ -12,7 +12,7 @@ import org.junit.Test
  * depends on it.
  */
 class NpyReaderTest {
-    private val npzFile = File("src/main/assets/onnx_int8/vieneu_v3_heads.npz")
+    private val npzFile = File("src/main/assets/onnx_update/vieneu_v3_heads.npz")
 
     @Test
     fun parsesAllExpectedArraysWithCorrectShapesAndValues() {

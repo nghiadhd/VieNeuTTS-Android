@@ -15,10 +15,10 @@ import org.junit.Test
  */
 class PromptBuilderTest {
     private val config by lazy {
-        VieNeuConfig.fromJson(File("src/main/assets/onnx_int8/config.json").readText())
+        VieNeuConfig.fromJson(File("src/main/assets/onnx_update/config.json").readText())
     }
     private val tokenizer by lazy {
-        BpeTokenizer.fromJson(File("src/main/assets/onnx_int8/tokenizer.json").readText())
+        BpeTokenizer.fromJson(File("src/main/assets/onnx_update/tokenizer.json").readText())
     }
     private val thaiSonCodes by lazy {
         val json = MiniJson.parse(File("src/main/assets/voices_v3_turbo.json").readText()).asObj()

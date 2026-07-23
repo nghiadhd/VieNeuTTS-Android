@@ -18,7 +18,7 @@ import org.junit.Test
  */
 class VieNeuMathTest {
     private val heads by lazy {
-        File("src/main/assets/onnx_int8/vieneu_v3_heads.npz").inputStream().use { NpyReader.parseNpz(it) }
+        File("src/main/assets/onnx_update/vieneu_v3_heads.npz").inputStream().use { NpyReader.parseNpz(it) }
     }
     private val thaiSonSpeakerEmb by lazy {
         val json = MiniJson.parse(File("src/main/assets/voices_v3_turbo.json").readText()).asObj()

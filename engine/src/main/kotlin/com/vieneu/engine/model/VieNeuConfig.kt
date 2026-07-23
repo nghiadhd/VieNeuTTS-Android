@@ -4,7 +4,7 @@ import com.vieneu.engine.tokenizer.MiniJson
 import com.vieneu.engine.tokenizer.asObj
 import com.vieneu.engine.tokenizer.asNum
 
-/** Mirrors the fields of `onnx_int8/config.json` that `OnnxV3LiteEngine` reads. */
+/** Mirrors the fields of `onnx_update/config.json` that `OnnxV3LiteEngine` reads. */
 data class VieNeuConfig(
     val nVq: Int,
     val hidden: Int,
