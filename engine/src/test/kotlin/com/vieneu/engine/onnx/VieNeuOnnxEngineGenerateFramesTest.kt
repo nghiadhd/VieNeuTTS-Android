@@ -12,21 +12,21 @@ import com.vieneu.engine.tokenizer.asArr
 import com.vieneu.engine.tokenizer.asObj
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import org.junit.Test
 
 /**
- * Expected `codes`/`eos` are the real `_acoustic_frame(h, temperature=0, ...)`
- * output from Python (argmax sampling — deterministic, so exactly
- * reproducible), fed the same prefill `h_last` this suite already validated
- * against Python in [VieNeuOnnxEnginePrefillTest] (see design spec's
- * shift-left notes).
+ * Expected frames are the real 5-frame `infer()` loop output from Python
+ * (prefill -> 5x [acoustic_frame, decode_step], temperature=0 so
+ * deterministic/exactly reproducible) on the same prompt this suite already
+ * validates prefill/acoustic_frame against — end-to-end proof that the outer
+ * backbone decode_step loop threads the KV-cache and re-embeds each sampled
+ * frame identically to onnx_runtime_lite.py's `infer()`, entirely on host.
  */
-class VieNeuOnnxEngineAcousticFrameTest {
+class VieNeuOnnxEngineGenerateFramesTest {
     private val assetsDir = File("src/main/assets/onnx_update")
 
     @Test
-    fun acousticFrame_matchesPythonOnnxRuntimeLite() {
+    fun generateFrames_matchesPythonOnnxRuntimeLite() {
         val config = VieNeuConfig.fromJson(File(assetsDir, "config.json").readText())
         val tokenizer = BpeTokenizer.fromJson(File(assetsDir, "tokenizer.json").readText())
         val heads = File(assetsDir, "vieneu_v3_heads.npz").inputStream().use { NpyReader.parseNpz(it) }
@@ -52,18 +52,26 @@ class VieNeuOnnxEngineAcousticFrameTest {
         val sessDecodeStep = env.createSession(File(assetsDir, "vieneu_decode_step.onnx").path, OrtSession.SessionOptions())
         val sessAcoustic = env.createSession(File(assetsDir, "vieneu_acoustic_cached.onnx").path, OrtSession.SessionOptions())
         VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
-            engine.prefill(promptEmbeds).use { prefillResult ->
-                val frame = engine.acousticFrame(
-                    h = prefillResult.hiddenLast,
-                    temperature = 0f,
-                    topK = 25,
-                    topP = 0.95f,
-                    repetitionPenalty = 1f,
-                    hist = null,
-                )
-                val expectedCodes = intArrayOf(393, 169, 926, 325, 917, 241, 944, 142, 389, 705, 682, 495, 181, 650, 51, 360)
-                assertEquals(expectedCodes.toList(), frame.codes.toList())
-                assertFalse(frame.eos)
+            val frames = engine.generateFrames(
+                promptEmbeds = promptEmbeds,
+                anchor = anchor,
+                maxNewFrames = 5,
+                temperature = 0f,
+                topK = 25,
+                topP = 0.95f,
+                repetitionPenalty = 1f,
+            )
+
+            val expected = listOf(
+                intArrayOf(393, 169, 926, 325, 917, 241, 944, 142, 389, 705, 682, 495, 181, 650, 51, 360),
+                intArrayOf(290, 454, 45, 480, 667, 940, 734, 156, 390, 260, 895, 536, 652, 288, 589, 991),
+                intArrayOf(366, 424, 605, 740, 763, 295, 633, 22, 802, 358, 676, 18, 365, 229, 166, 866),
+                intArrayOf(947, 124, 935, 987, 240, 28, 172, 109, 951, 510, 1, 228, 913, 738, 668, 1004),
+                intArrayOf(640, 374, 896, 969, 33, 599, 479, 478, 653, 13, 119, 652, 1015, 547, 816, 264),
+            )
+            assertEquals(expected.size, frames.size)
+            for (i in expected.indices) {
+                assertEquals(expected[i].toList(), frames[i].toList(), "frame $i")
             }
         }
     }

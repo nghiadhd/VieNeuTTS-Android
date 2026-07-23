@@ -22,6 +22,7 @@ import kotlin.random.Random
 class VieNeuOnnxEngine(
     private val env: OrtEnvironment,
     private val sessPrefill: OrtSession,
+    private val sessDecodeStep: OrtSession,
     private val sessAcoustic: OrtSession,
     private val textEmb: NpyArray, // (Vt, H)
     private val audioEmb: NpyArray, // (nVq, Va, H)
@@ -59,6 +60,81 @@ class VieNeuOnnxEngine(
                     detachTensor(env, result.get("present_v_$i").get() as OnnxTensor)
                 }
                 return PrefillResult(hiddenLast, pastK, pastV)
+            }
+        }
+    }
+
+    /**
+     * Mirrors the full frame-generation loop in `infer()`: prefill once,
+     * then alternate `acousticFrame` (sample one frame's codes from the
+     * current backbone hidden state) with `decodeStep` (feed those codes
+     * back in to get the next backbone hidden state), until EOS or
+     * [maxNewFrames]. Returns one `IntArray` (length [VieNeuConfig.nVq]) per
+     * generated frame.
+     */
+    fun generateFrames(
+        promptEmbeds: Array<FloatArray>,
+        anchor: FloatArray?,
+        maxNewFrames: Int,
+        temperature: Float,
+        topK: Int,
+        topP: Float,
+        repetitionPenalty: Float,
+        random: Random = Random.Default,
+    ): List<IntArray> {
+        val hist = if (repetitionPenalty != 1.0f) List(config.nVq) { mutableSetOf<Int>() } else null
+        val tPrompt = promptEmbeds.size
+        val frames = mutableListOf<IntArray>()
+
+        // NOT `prefill(...).use{}`: ownership of pastK/pastV transfers into this
+        // loop and gets closed manually below as each iteration replaces them —
+        // PrefillResult.close() would then double-close the already-replaced ones.
+        val pre = prefill(promptEmbeds)
+        var h = pre.hiddenLast
+        var pastK = pre.pastK
+        var pastV = pre.pastV
+        try {
+            for (t in 0 until maxNewFrames) {
+                val frame = acousticFrame(h, temperature, topK, topP, repetitionPenalty, hist, random)
+                frames.add(frame.codes)
+                if (frame.eos) break
+
+                val slotRow = IntArray(config.nVq + 1) { config.audioPad }
+                slotRow[0] = config.speechGenerationStart
+                for (ch in 0 until config.nVq) slotRow[ch + 1] = frame.codes[ch]
+                val slotEmbed = VieNeuMath.embedRows(arrayOf(slotRow), textEmb, audioEmb, config.nVq, config.audioPad, anchor)[0]
+
+                val (nextH, newPastK, newPastV) = decodeStep(slotEmbed, position = (tPrompt + t).toLong(), pastK = pastK, pastV = pastV)
+                pastK.forEach { it.close() }; pastV.forEach { it.close() }
+                pastK = newPastK; pastV = newPastV
+                h = nextH
+            }
+        } finally {
+            pastK.forEach { it.close() }
+            pastV.forEach { it.close() }
+        }
+        return frames
+    }
+
+    /** One `sess_dec.run(...)` call: the backbone's single-token continuation step. */
+    private fun decodeStep(
+        slotEmbed: FloatArray,
+        position: Long,
+        pastK: List<OnnxTensor>,
+        pastV: List<OnnxTensor>,
+    ): Triple<FloatArray, List<OnnxTensor>, List<OnnxTensor>> {
+        val h = config.hidden
+        OnnxTensor.createTensor(env, FloatBuffer.wrap(slotEmbed), longArrayOf(1, 1, h.toLong())).use { inputsEmbeds ->
+            OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(position)), longArrayOf(1, 1)).use { positionIds ->
+                val inputs = mutableMapOf<String, OnnxTensor>("inputs_embeds" to inputsEmbeds, "position_ids" to positionIds)
+                for (i in pastK.indices) inputs["past_k_$i"] = pastK[i]
+                for (i in pastV.indices) inputs["past_v_$i"] = pastV[i]
+                sessDecodeStep.run(inputs).use { result ->
+                    val nextH = toArray((result.get("hidden").get() as OnnxTensor).floatBuffer)
+                    val newPastK = (0 until config.numHiddenLayers).map { i -> detachTensor(env, result.get("present_k_$i").get() as OnnxTensor) }
+                    val newPastV = (0 until config.numHiddenLayers).map { i -> detachTensor(env, result.get("present_v_$i").get() as OnnxTensor) }
+                    return Triple(nextH, newPastK, newPastV)
+                }
             }
         }
     }
@@ -195,6 +271,7 @@ class VieNeuOnnxEngine(
 
     override fun close() {
         sessPrefill.close()
+        sessDecodeStep.close()
         sessAcoustic.close()
     }
 }

@@ -50,8 +50,9 @@ class VieNeuOnnxEnginePrefillTest {
 
         val env = OrtEnvironment.getEnvironment()
         val sessPrefill = env.createSession(File(assetsDir, "vieneu_prefill.onnx").path, OrtSession.SessionOptions())
+        val sessDecodeStep = env.createSession(File(assetsDir, "vieneu_decode_step.onnx").path, OrtSession.SessionOptions())
         val sessAcoustic = env.createSession(File(assetsDir, "vieneu_acoustic_cached.onnx").path, OrtSession.SessionOptions())
-        VieNeuOnnxEngine(env, sessPrefill, sessAcoustic, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
+        VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
             engine.prefill(promptEmbeds).use { result ->
                 assertEquals(768, result.hiddenLast.size)
                 val expectedFirst5 = floatArrayOf(0.035474058240652084f, 0.027332818135619164f, -0.0016091817524284124f, -0.048954445868730545f, 0.022672895342111588f)
