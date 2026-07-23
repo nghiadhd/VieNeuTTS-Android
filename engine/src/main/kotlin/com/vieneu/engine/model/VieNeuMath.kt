@@ -147,6 +147,24 @@ object VieNeuMath {
         return order[kept.size - 1]
     }
 
+    /**
+     * Weight-tied output projection: `vec (H,) @ table[channel].T -> (Vrow,)`,
+     * mirrors `vec @ self.audio_emb[ch].T` / `slot0 @ self.text_emb.T`. `table`
+     * is `(nRows, H)` for the text head or `(nChannels, Va, H)` for an audio
+     * channel head — pass `channelOffset = 0` for the former.
+     */
+    fun projectLogits(vec: FloatArray, table: NpyArray, channelOffset: Int, vocabSize: Int): FloatArray {
+        val h = vec.size
+        val out = FloatArray(vocabSize)
+        for (v in 0 until vocabSize) {
+            var sum = 0f
+            val rowOff = channelOffset + v * h
+            for (d in 0 until h) sum += vec[d] * table.data[rowOff + d]
+            out[v] = sum
+        }
+        return out
+    }
+
     fun softmax(x: FloatArray): FloatArray {
         var max = Float.NEGATIVE_INFINITY
         for (v in x) if (v > max) max = v

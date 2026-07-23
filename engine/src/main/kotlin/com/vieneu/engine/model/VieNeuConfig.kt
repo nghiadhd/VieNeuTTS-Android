@@ -10,6 +10,7 @@ data class VieNeuConfig(
     val hidden: Int,
     val numHiddenLayers: Int, // L — backbone decode_step KV-cache layer count
     val localNumHiddenLayers: Int, // L_loc — acoustic (per-frame) decoder layer count
+    val localNumAttentionHeads: Int, // nH_loc — acoustic decoder KV-cache head count
     val audioPad: Int,
     val textPromptStart: Int,
     val textPromptEnd: Int,
@@ -31,6 +32,7 @@ data class VieNeuConfig(
                 hidden = root.getValue("hidden_size").asNum(),
                 numHiddenLayers = root.getValue("num_hidden_layers").asNum(),
                 localNumHiddenLayers = root.getValue("local_num_hidden_layers").asNum(),
+                localNumAttentionHeads = root.getValue("local_num_attention_heads").asNum(),
                 audioPad = root.getValue("audio_pad_token_id").asNum(),
                 textPromptStart = root.getValue("text_prompt_start_token_id").asNum(),
                 textPromptEnd = root.getValue("text_prompt_end_token_id").asNum(),
