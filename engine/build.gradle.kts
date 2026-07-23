@@ -29,6 +29,14 @@ android {
 
     // libsea_g2p_android.so (built by cargo-ndk) already lives under
     // src/main/jniLibs/arm64-v8a/ — AGP picks it up automatically.
+
+    // These are already-compressed binary blobs (ONNX weights, mmap'd
+    // dictionaries) — AAPT compression just wastes build time/APK size and,
+    // for anything we'd want to mmap directly out of the APK later, would
+    // break that. Store them uncompressed.
+    androidResources {
+        noCompress += listOf("onnx", "data", "npz", "bin")
+    }
 }
 
 dependencies {
@@ -38,4 +46,7 @@ dependencies {
     // JNA's Android build is published as an .aar under the same coordinate —
     // the @aar classifier is required (plain .jar won't include native loader glue).
     implementation("net.java.dev.jna:jna:5.14.0@aar")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(kotlin("test"))
 }
