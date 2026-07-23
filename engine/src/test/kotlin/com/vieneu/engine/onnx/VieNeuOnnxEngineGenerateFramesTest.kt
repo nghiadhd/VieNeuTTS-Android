@@ -12,6 +12,7 @@ import com.vieneu.engine.tokenizer.asArr
 import com.vieneu.engine.tokenizer.asObj
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Test
 
 /**
@@ -51,7 +52,8 @@ class VieNeuOnnxEngineGenerateFramesTest {
         val sessPrefill = env.createSession(File(assetsDir, "vieneu_prefill.onnx").path, OrtSession.SessionOptions())
         val sessDecodeStep = env.createSession(File(assetsDir, "vieneu_decode_step.onnx").path, OrtSession.SessionOptions())
         val sessAcoustic = env.createSession(File(assetsDir, "vieneu_acoustic_cached.onnx").path, OrtSession.SessionOptions())
-        VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
+        val sessCodecDecode = env.createSession(File("src/main/assets/moss_audio_tokenizer_decode_full.onnx").path, OrtSession.SessionOptions())
+        VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, sessCodecDecode, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
             val frames = engine.generateFrames(
                 promptEmbeds = promptEmbeds,
                 anchor = anchor,
@@ -73,6 +75,16 @@ class VieNeuOnnxEngineGenerateFramesTest {
             for (i in expected.indices) {
                 assertEquals(expected[i].toList(), frames[i].toList(), "frame $i")
             }
+
+            // Full pipeline: codes -> waveform (_decode_codes), checked against
+            // the real codec output for these same 5 frames.
+            val audio = engine.decodeCodes(frames)
+            assertEquals(19200, audio.size)
+            val expectedFirst5 = floatArrayOf(0.14787209033966064f, 0.17652390897274017f, 0.19321726262569427f, 0.2147180438041687f, 0.23284675180912018f)
+            for (i in expectedFirst5.indices) {
+                assertTrue(kotlin.math.abs(expectedFirst5[i] - audio[i]) < 1e-4f, "sample $i: expected ${expectedFirst5[i]} but was ${audio[i]}")
+            }
+            assertTrue(kotlin.math.abs(audio.sum() - 7.822723865509033f) < 1e-1f, "audio sum was ${audio.sum()}")
         }
     }
 }

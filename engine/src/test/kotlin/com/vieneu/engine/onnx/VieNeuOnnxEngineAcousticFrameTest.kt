@@ -51,7 +51,8 @@ class VieNeuOnnxEngineAcousticFrameTest {
         val sessPrefill = env.createSession(File(assetsDir, "vieneu_prefill.onnx").path, OrtSession.SessionOptions())
         val sessDecodeStep = env.createSession(File(assetsDir, "vieneu_decode_step.onnx").path, OrtSession.SessionOptions())
         val sessAcoustic = env.createSession(File(assetsDir, "vieneu_acoustic_cached.onnx").path, OrtSession.SessionOptions())
-        VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
+        val sessCodecDecode = env.createSession(File("src/main/assets/moss_audio_tokenizer_decode_full.onnx").path, OrtSession.SessionOptions())
+        VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, sessCodecDecode, heads.getValue("text_emb"), heads.getValue("audio_emb"), config).use { engine ->
             engine.prefill(promptEmbeds).use { prefillResult ->
                 val frame = engine.acousticFrame(
                     h = prefillResult.hiddenLast,

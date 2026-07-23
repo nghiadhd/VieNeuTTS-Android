@@ -24,6 +24,7 @@ class VieNeuOnnxEngine(
     private val sessPrefill: OrtSession,
     private val sessDecodeStep: OrtSession,
     private val sessAcoustic: OrtSession,
+    private val sessCodecDecode: OrtSession,
     private val textEmb: NpyArray, // (Vt, H)
     private val audioEmb: NpyArray, // (nVq, Va, H)
     private val config: VieNeuConfig,
@@ -114,6 +115,39 @@ class VieNeuOnnxEngine(
             pastV.forEach { it.close() }
         }
         return frames
+    }
+
+    /**
+     * Mirrors `_decode_codes`: one non-autoregressive `sess_codec_dec.run(...)`
+     * call turning all generated frames into a 48kHz mono waveform (mean over
+     * the codec's stereo output channels — matches Python exactly, including
+     * *not* trimming by the codec's own `audio_lengths` output, which
+     * `_decode_codes` ignores; only the streaming decode path uses it).
+     */
+    fun decodeCodes(frames: List<IntArray>): FloatArray {
+        val t = frames.size
+        val nVq = config.nVq
+        val codesFlat = IntArray(t * nVq)
+        for (i in 0 until t) for (ch in 0 until nVq) codesFlat[i * nVq + ch] = frames[i][ch]
+
+        OnnxTensor.createTensor(env, java.nio.IntBuffer.wrap(codesFlat), longArrayOf(1, t.toLong(), nVq.toLong())).use { audioCodes ->
+            OnnxTensor.createTensor(env, java.nio.IntBuffer.wrap(intArrayOf(t)), longArrayOf(1)).use { codeLengths ->
+                sessCodecDecode.run(mapOf("audio_codes" to audioCodes, "audio_code_lengths" to codeLengths)).use { result ->
+                    val audioTensor = result.get("audio").get() as OnnxTensor
+                    val shape = audioTensor.info.shape // (1, C, L)
+                    val channels = shape[1].toInt()
+                    val length = shape[2].toInt()
+                    val buf = audioTensor.floatBuffer
+                    val mono = FloatArray(length)
+                    for (c in 0 until channels) {
+                        val base = c * length
+                        for (i in 0 until length) mono[i] += buf.get(base + i)
+                    }
+                    for (i in 0 until length) mono[i] /= channels
+                    return mono
+                }
+            }
+        }
     }
 
     /** One `sess_dec.run(...)` call: the backbone's single-token continuation step. */
@@ -273,5 +307,6 @@ class VieNeuOnnxEngine(
         sessPrefill.close()
         sessDecodeStep.close()
         sessAcoustic.close()
+        sessCodecDecode.close()
     }
 }
