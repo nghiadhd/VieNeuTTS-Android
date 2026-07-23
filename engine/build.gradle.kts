@@ -29,14 +29,11 @@ android {
 
     // libsea_g2p_android.so (built by cargo-ndk) already lives under
     // src/main/jniLibs/arm64-v8a/ — AGP picks it up automatically.
-
-    // These are already-compressed binary blobs (ONNX weights, mmap'd
-    // dictionaries) — AAPT compression just wastes build time/APK size and,
-    // for anything we'd want to mmap directly out of the APK later, would
-    // break that. Store them uncompressed.
-    androidResources {
-        noCompress += listOf("onnx", "data", "npz", "bin")
-    }
+    //
+    // Model assets (onnx/data/npz/bin) are copied out to real files on first
+    // launch (TtsEngine.create) rather than mmap'd straight out of the APK,
+    // so leaving AAPT free to compress them is a net win — deflate shrinks
+    // this particular set ~35-50%, smaller download for no runtime cost.
 }
 
 dependencies {
