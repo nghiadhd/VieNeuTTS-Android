@@ -49,4 +49,9 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation(kotlin("test"))
+    // Desktop ONNX Runtime — same ai.onnxruntime.* API as onnxruntime-android,
+    // used ONLY in JVM unit tests so the inference orchestration logic can be
+    // shift-left tested on host (this devcontainer is linux-aarch64) before
+    // ever touching the emulator. Never a main/runtime dependency.
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.19.2")
 }
