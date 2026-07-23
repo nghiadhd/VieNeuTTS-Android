@@ -8,3 +8,5 @@ build/
 captures/
 .externalNativeBuild/
 /rust/*/target/
+.DS_Store
+/rust/sea-g2p-upstream/
