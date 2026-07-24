@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -94,7 +93,6 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val total = sentences.size
@@ -111,12 +109,13 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
             val currentText = sentences.getOrNull(displayedIndex)?.text ?: ""
             val generatedCount = sentences.count { it.audioStatus == com.vieneu.reader.data.AudioStatus.GENERATED }
 
-            // Fixed height so the slider/buttons below don't shift position every time the
-            // current sentence's text is a different length — a short "Hừ!" vs. a long compound
-            // sentence used to make the whole (vertically-centered) column jump around, which
-            // was very noticeable while dragging the progress slider across sentences.
+            // Fills all space between the top bar and the slider/controls below, rather than a
+            // small fixed box — weight(1f) means its size never depends on the current
+            // sentence's text length, so the slider/buttons below it don't shift position as
+            // that length varies (short "Hừ!" vs. a long compound sentence), while still using
+            // the full available reading area instead of just a slice of it.
             Box(
-                modifier = Modifier.fillMaxWidth().height(120.dp).verticalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(currentText, style = MaterialTheme.typography.bodyLarge)

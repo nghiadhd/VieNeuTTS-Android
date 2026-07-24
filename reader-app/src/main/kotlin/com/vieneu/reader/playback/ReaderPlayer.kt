@@ -146,6 +146,10 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
 
     private suspend fun playLoop(chapter: Chapter, startIndex: Int) {
         var index = startIndex
+        // Only the very first sentence of this playback session needs the full cold-start
+        // buffer — once we're warmed up, a momentary catch-up only needs 1 sentence ahead to
+        // resume, not a full buffer rebuild (see BufferGate's doc comment).
+        var warmedUp = false
         while (scope.isActive) {
             val sentences = repo.getSentencesOnce(chapter.id)
             if (index >= sentences.size) {
@@ -156,7 +160,7 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
 
             val allGenerated = sentences.all { it.audioStatus == AudioStatus.GENERATED }
             val lastGeneratedIndex = sentences.indexOfLast { it.audioStatus == AudioStatus.GENERATED }
-            if (!allGenerated && !BufferGate.mayPlay(sentences.size, index, lastGeneratedIndex)) {
+            if (!allGenerated && !BufferGate.mayPlay(sentences.size, index, lastGeneratedIndex, warmedUp)) {
                 _state.update { it.copy(sentenceIndex = index, status = Status.WAITING_FOR_BUFFER) }
                 delay(400)
                 continue
@@ -178,6 +182,7 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
             _state.update { it.copy(sentenceIndex = index, status = Status.PLAYING) }
             repo.updatePosition(chapter.bookId, chapter.orderIndex, index)
             playAacFile(pcmData, _state.value.speed, _state.value.pitch)
+            warmedUp = true
             index++
         }
     }

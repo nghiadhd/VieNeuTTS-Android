@@ -16,10 +16,11 @@ import com.vieneu.reader.data.BookRepository
 import com.vieneu.reader.data.Chapter
 import com.vieneu.reader.data.Sentence
 import java.io.File
+import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
@@ -40,7 +41,14 @@ import kotlinx.coroutines.launch
  */
 class TtsGenerationService : Service() {
     private lateinit var repo: BookRepository
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Dedicated single thread, not the shared Dispatchers.Default pool: generation is one
+    // long (7-15s), CPU-heavy synthesize() call after another, back-to-back, with nothing to
+    // yield the thread in between. Sharing Dispatchers.Default with it meant the player's own
+    // decode/prefetch work (also on Dispatchers.Default) could be starved of a thread to run
+    // on for extended stretches — looking like playback silently freezing while generation kept
+    // racing ahead in the background, since generation itself was never actually blocked.
+    private val generationDispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val scope = CoroutineScope(SupervisorJob() + generationDispatcher)
     private var engine: TtsEngine? = null
     private var workerJob: Job? = null
 
@@ -89,6 +97,7 @@ class TtsGenerationService : Service() {
     override fun onDestroy() {
         workerJob?.cancel()
         engine?.close()
+        generationDispatcher.close()
         super.onDestroy()
     }
 
