@@ -64,7 +64,17 @@ fun SpeechSettingsScreen(bookId: Long, onBack: () -> Unit) {
         },
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-            Text("Tốc độ đọc: ${"%.2f".format(playerState.speed)}x", style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Tốc độ đọc: ${"%.2f".format(playerState.speed)}x", style = MaterialTheme.typography.titleMedium)
+                TextButton(
+                    enabled = playerState.speed != 1.0f,
+                    onClick = { app.player.setSpeedPitch(1.0f, playerState.pitch) },
+                ) { Text("Mặc định") }
+            }
             Slider(
                 value = playerState.speed,
                 onValueChange = { app.player.setSpeedPitch(it, playerState.pitch) },
@@ -72,7 +82,17 @@ fun SpeechSettingsScreen(bookId: Long, onBack: () -> Unit) {
                 steps = 14, // 0.5, 0.6, 0.7, ..., 2.0 in steps of 0.1
             )
 
-            Text("Cao độ giọng: ${"%.2f".format(playerState.pitch)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Cao độ giọng: ${"%.2f".format(playerState.pitch)}", style = MaterialTheme.typography.titleMedium)
+                TextButton(
+                    enabled = playerState.pitch != 1.0f,
+                    onClick = { app.player.setSpeedPitch(playerState.speed, 1.0f) },
+                ) { Text("Mặc định") }
+            }
             Slider(
                 value = playerState.pitch,
                 onValueChange = { app.player.setSpeedPitch(playerState.speed, it) },
