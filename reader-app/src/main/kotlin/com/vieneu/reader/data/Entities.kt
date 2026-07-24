@@ -65,10 +65,10 @@ data class AppSettings(
     val autoAdvanceChapter: Boolean = true,
     val sleepTimerMinutes: Int? = null,
     /** Auto-delete a chapter's audio once the reading cursor moves more than this many chapters past it. */
-    val autoRetentionEnabled: Boolean = true,
+    val autoRetentionEnabled: Boolean = false,
     val retentionLookBehindChapters: Int = 1,
-    /** Background (low-priority) pre-generation pauses once total audio on disk exceeds this — never deletes to make room, just stops generating further ahead. */
-    val storageBudgetMb: Int = 2048,
     /** Multiplier on the base subtitle text size in ListenScreen (1.0 = normal). */
     val subtitleFontScale: Float = 1.0f,
+    /** Multiplier on the base subtitle line height in ListenScreen (1.0 = normal). */
+    val subtitleLineSpacing: Float = 1.0f,
 )

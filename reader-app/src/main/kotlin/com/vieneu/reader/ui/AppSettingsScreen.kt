@@ -39,8 +39,8 @@ import com.vieneu.reader.ReaderApp
 import com.vieneu.reader.data.AppSettings
 import kotlinx.coroutines.launch
 
-private val STORAGE_BUDGET_PRESETS_MB = listOf(1024, 2048, 4096, 8192)
 private val SUBTITLE_FONT_SCALE_PRESETS = listOf(0.85f to "Nhỏ", 1.0f to "Vừa", 1.25f to "Lớn", 1.5f to "Rất lớn")
+private val SUBTITLE_LINE_SPACING_PRESETS = listOf(1.0f to "Hẹp", 1.3f to "Vừa", 1.6f to "Rộng")
 
 @Composable
 fun AppSettingsScreen(onBack: () -> Unit) {
@@ -81,22 +81,9 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             ) {
                 Text("Tự động xóa chương đã nghe qua")
                 Switch(
-                    checked = settings?.autoRetentionEnabled ?: true,
+                    checked = settings?.autoRetentionEnabled ?: false,
                     onCheckedChange = { enabled -> update { it.copy(autoRetentionEnabled = enabled) } },
                 )
-            }
-            Text(
-                "Giới hạn dung lượng cho tạo trước ở chế độ nền",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
-            )
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                STORAGE_BUDGET_PRESETS_MB.forEach { mb ->
-                    TextButton(onClick = { update { it.copy(storageBudgetMb = mb) } }) {
-                        val label = if (mb >= 1024) "${mb / 1024}GB" else "${mb}MB"
-                        Text(if (settings?.storageBudgetMb == mb) "[$label]" else label)
-                    }
-                }
             }
 
             Text(
@@ -108,6 +95,18 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 SUBTITLE_FONT_SCALE_PRESETS.forEach { (scale, label) ->
                     TextButton(onClick = { update { it.copy(subtitleFontScale = scale) } }) {
                         Text(if (settings?.subtitleFontScale == scale) "[$label]" else label)
+                    }
+                }
+            }
+            Text(
+                "Dãn dòng",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            )
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                SUBTITLE_LINE_SPACING_PRESETS.forEach { (spacing, label) ->
+                    TextButton(onClick = { update { it.copy(subtitleLineSpacing = spacing) } }) {
+                        Text(if (settings?.subtitleLineSpacing == spacing) "[$label]" else label)
                     }
                 }
             }

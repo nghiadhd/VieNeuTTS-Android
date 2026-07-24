@@ -9,16 +9,13 @@ import com.vieneu.reader.generation.AacWriter
 import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Validates manual per-chapter cleanup, the distance-to-cursor automatic retention sweep, and
- * the disk-budget backpressure gate for background pre-generation — see the storage-management
- * design in docs/superpowers/specs and [BookRepository.runRetentionSweep]/[BookRepository.hasStorageBudget].
+ * Validates manual per-chapter cleanup and the distance-to-cursor automatic retention sweep —
+ * see the storage-management design in docs/superpowers/specs and [BookRepository.runRetentionSweep].
  */
 @RunWith(AndroidJUnit4::class)
 class StorageCleanupTest {
@@ -85,24 +82,5 @@ class StorageCleanupTest {
         assertTrue("chapter 0 (behind window) should have been cleaned up", chapter0After.none { it.audioStatus == AudioStatus.GENERATED })
         assertTrue("chapter 1 (behind window) should have been cleaned up", chapter1After.none { it.audioStatus == AudioStatus.GENERATED })
         assertTrue("chapter 2 (at the cursor) must NOT be auto-deleted", chapter2After.any { it.audioStatus == AudioStatus.GENERATED })
-    }
-
-    @Test
-    fun hasStorageBudgetReflectsActualDiskUsage() = runBlocking {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val repo = BookRepository(context)
-
-        val bookId = repo.importEpub(testBookUri(context))
-        val book = repo.getBookOnce(bookId)!!
-        val chapter = repo.observeChapters(bookId).first().first()
-        val sentence = repo.getSentencesOnce(chapter.id).first()
-        generateDummySentence(repo, book.folderId, chapter.orderIndex, chapter.id, sentence.id, sentence.orderIndex)
-
-        val settings = repo.getSettingsOrDefault("Minh Đức")
-        repo.updateSettings(settings.copy(storageBudgetMb = 0)) // any real usage now exceeds a 0MB budget
-        assertFalse("expected budget exceeded with a 0MB cap", repo.hasStorageBudget())
-
-        repo.updateSettings(settings.copy(storageBudgetMb = 100_000)) // effectively unlimited
-        assertTrue("expected budget available with a huge cap", repo.hasStorageBudget())
     }
 }

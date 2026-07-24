@@ -54,6 +54,7 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
     val playerState by app.player.state.collectAsState()
     val settings by app.repository.observeSettings().collectAsState(initial = null)
     val subtitleFontScale = settings?.subtitleFontScale ?: 1.0f
+    val subtitleLineSpacing = settings?.subtitleLineSpacing ?: 1.0f
 
     // Start high-priority generation for this chapter, and kick off the next
     // chapter in the background (low priority) — design spec §2/§4.
@@ -124,6 +125,7 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
                     currentText,
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontSize = MaterialTheme.typography.bodyLarge.fontSize * subtitleFontScale,
+                        lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * subtitleFontScale * subtitleLineSpacing,
                     ),
                 )
             }

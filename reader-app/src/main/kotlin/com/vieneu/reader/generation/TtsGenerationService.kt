@@ -110,12 +110,6 @@ class TtsGenerationService : Service() {
                 delay(500)
                 continue
             }
-            // Budget check only ever gates background look-ahead — the chapter the user is
-            // actively listening to (high priority) must never stall on storage bookkeeping.
-            if (highId == null && !repo.hasStorageBudget()) {
-                lowPriorityChapterId.value = null
-                continue
-            }
             val sentence = nextUngenerated(chapterId)
             if (sentence == null) {
                 if (highPriorityChapterId.value == chapterId) highPriorityChapterId.value = null

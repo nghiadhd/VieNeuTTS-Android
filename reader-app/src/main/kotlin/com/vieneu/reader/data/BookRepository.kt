@@ -184,17 +184,6 @@ class BookRepository(private val context: Context) {
         }
     }
 
-    /**
-     * Gates background (low-priority) pre-generation only — never used to decide whether to
-     * delete anything. When over budget the correct response is to stop generating further
-     * ahead, not to evict the look-ahead buffer that was just spent CPU/battery producing.
-     */
-    suspend fun hasStorageBudget(): Boolean = withContext(Dispatchers.IO) {
-        val settings = settingsDao.get() ?: return@withContext true
-        val budgetBytes = settings.storageBudgetMb.toLong() * 1024 * 1024
-        chapterDao.sumAudioBytesAcrossAllBooks() < budgetBytes
-    }
-
     suspend fun resolveVoice(bookId: Long, defaultVoice: String): String {
         val book = bookDao.get(bookId)
         return book?.voiceOverride ?: getSettingsOrDefault(defaultVoice).defaultVoice

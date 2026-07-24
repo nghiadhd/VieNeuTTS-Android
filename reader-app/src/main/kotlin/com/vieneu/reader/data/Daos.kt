@@ -63,9 +63,6 @@ interface ChapterDao {
 
     @Query("UPDATE chapters SET audioBytes = 0 WHERE id = :chapterId")
     suspend fun clearAudioBytes(chapterId: Long)
-
-    @Query("SELECT COALESCE(SUM(audioBytes), 0) FROM chapters")
-    suspend fun sumAudioBytesAcrossAllBooks(): Long
 }
 
 @Dao
