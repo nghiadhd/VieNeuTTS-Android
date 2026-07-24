@@ -8,7 +8,7 @@
         android:allowBackup="false"
         android:label="VieNeu Reader"
         android:largeHeap="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"
             android:exported="true">

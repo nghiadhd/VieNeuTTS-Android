@@ -3,7 +3,6 @@ package com.vieneu.reader
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
@@ -17,6 +16,7 @@ import com.vieneu.reader.ui.BookDetailScreen
 import com.vieneu.reader.ui.BookVoiceScreen
 import com.vieneu.reader.ui.LibraryScreen
 import com.vieneu.reader.ui.ListenScreen
+import com.vieneu.reader.ui.ReaderTheme
 import com.vieneu.reader.ui.Routes
 import com.vieneu.reader.ui.SpeechSettingsScreen
 
@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            ReaderTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val navController = rememberNavController()
                     NavHost(navController = navController, startDestination = Routes.LIBRARY) {

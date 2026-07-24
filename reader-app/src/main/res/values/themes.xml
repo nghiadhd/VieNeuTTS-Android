@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Only covers the brief pre-Compose window/system-bar flash on cold launch — the actual
+         app UI's dark-mode colors come from ReaderTheme (Compose MaterialTheme). Split across
+         values/values-night since the framework has no built-in DayNight theme family (that's
+         an AppCompat/Material Components convention this pure-Compose app doesn't depend on). -->
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>
