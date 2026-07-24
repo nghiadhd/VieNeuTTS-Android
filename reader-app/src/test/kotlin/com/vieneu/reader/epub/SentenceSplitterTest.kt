@@ -1,6 +1,7 @@
 package com.vieneu.reader.epub
 
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.Test
 
 class SentenceSplitterTest {
@@ -56,5 +57,38 @@ class SentenceSplitterTest {
     fun ignoresEmptyInput() {
         assertEquals(emptyList(), SentenceSplitter.split(""))
         assertEquals(emptyList(), SentenceSplitter.split("   \n\n  "))
+    }
+
+    @Test
+    fun capsRunOnSentenceWithNoTerminatorAtCommaBoundaries() {
+        // No `.!?…` anywhere, so the base splitter would emit this whole thing as
+        // one 400+ char "sentence" — a real, if pathological, shape for OCR'd or
+        // loosely-punctuated novel text, and the direct trigger for an oversized
+        // single-shot synthesize() call on a memory-constrained device.
+        val clause = "một câu rất dài không có dấu chấm câu nào cả nó cứ kéo dài mãi"
+        val text = (1..8).joinToString(", ") { clause } + "."
+
+        val result = SentenceSplitter.split(text)
+
+        assertTrue(result.size > 1, "expected the run-on sentence to be split into multiple chunks")
+        result.forEach { assertTrue(it.length <= 256, "chunk exceeds cap: '$it' (${it.length} chars)") }
+        val wordCount = result.joinToString(" ").split(Regex("\\s+")).count { it.isNotBlank() }
+        val expectedWordCount = text.split(Regex("[\\s,]+")).count { it.isNotBlank() }
+        assertEquals(expectedWordCount, wordCount, "no words should be dropped or duplicated by chunking")
+    }
+
+    @Test
+    fun capsRunOnSentenceWithNoPunctuationAtAllByWords() {
+        val text = "tu " + "chu ".repeat(150) + "cuoi" // no punctuation whatsoever, ~750 chars
+        val result = SentenceSplitter.split(text)
+
+        assertTrue(result.size > 1, "expected the word-salad sentence to be split into multiple chunks")
+        result.forEach { assertTrue(it.length <= 256, "chunk exceeds cap: '$it' (${it.length} chars)") }
+    }
+
+    @Test
+    fun leavesShortSentencesUntouched() {
+        val text = "Câu ngắn thôi."
+        assertEquals(listOf("Câu ngắn thôi."), SentenceSplitter.split(text))
     }
 }

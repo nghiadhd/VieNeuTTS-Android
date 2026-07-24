@@ -7,10 +7,13 @@ import android.media.PlaybackParams
 import com.vieneu.reader.data.AudioStatus
 import com.vieneu.reader.data.BookRepository
 import com.vieneu.reader.data.Chapter
+import com.vieneu.reader.generation.AacReader
 import java.io.File
-import java.io.RandomAccessFile
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -48,6 +51,35 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
     private var playJob: Job? = null
     private var currentChapter: Chapter? = null
 
+    // Decoding the next sentence's AAC file (MediaCodec, real CPU cost) while the current one
+    // is still playing, instead of only starting it once the current one's timer runs out —
+    // otherwise that decode time becomes an audible gap between every single sentence.
+    private var prefetchedSentenceId: Long? = null
+    private var prefetchedPcm: Deferred<Pair<Int, ShortArray>>? = null
+
+    private fun startPrefetch(sentenceId: Long, file: File) {
+        if (prefetchedSentenceId == sentenceId) return
+        clearPrefetch()
+        prefetchedSentenceId = sentenceId
+        prefetchedPcm = scope.async(Dispatchers.Default) { AacReader.readPcm16(file) }
+    }
+
+    private fun clearPrefetch() {
+        prefetchedPcm?.cancel()
+        prefetchedPcm = null
+        prefetchedSentenceId = null
+    }
+
+    private suspend fun decodeOrTakePrefetch(sentenceId: Long, file: File): Pair<Int, ShortArray> {
+        if (prefetchedSentenceId == sentenceId) {
+            val deferred = prefetchedPcm
+            prefetchedSentenceId = null
+            prefetchedPcm = null
+            if (deferred != null) return deferred.await()
+        }
+        return AacReader.readPcm16(file)
+    }
+
     fun setSpeedPitch(speed: Float, pitch: Float) {
         _state.update { it.copy(speed = speed, pitch = pitch) }
     }
@@ -59,12 +91,17 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
     fun playChapter(chapter: Chapter, startIndex: Int = 0) {
         currentChapter = chapter
         playJob?.cancel()
+        clearPrefetch()
         _state.update { it.copy(chapterId = chapter.id, sentenceIndex = startIndex, status = Status.PLAYING) }
         playJob = scope.launch { playLoop(chapter, startIndex) }
+        // Distance-to-cursor retention only needs to run once per chapter transition, not on
+        // every per-sentence position update inside playLoop.
+        scope.launch { repo.runRetentionSweep(chapter.bookId) }
     }
 
     fun pause() {
         playJob?.cancel()
+        clearPrefetch()
         _state.update { it.copy(status = Status.PAUSED) }
     }
 
@@ -74,6 +111,20 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
         playJob?.cancel()
         _state.update { it.copy(status = Status.PLAYING) }
         playJob = scope.launch { playLoop(chapter, index) }
+    }
+
+    /**
+     * Call after a chapter's audio is deleted out from under the player (manual per-chapter
+     * cleanup, retention sweep). If it's the chapter currently loaded, the in-memory sentence
+     * position has to be dropped too — otherwise it keeps pointing at a sentence whose file no
+     * longer exists, and the UI (e.g. the progress slider) shows a stale position that survives
+     * even after fresh generation restarts from sentence 0.
+     */
+    fun notifyChapterAudioCleared(chapterId: Long) {
+        if (_state.value.chapterId != chapterId) return
+        playJob?.cancel()
+        clearPrefetch()
+        _state.update { it.copy(sentenceIndex = 0, status = Status.IDLE) }
     }
 
     fun next() {
@@ -88,6 +139,7 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
 
     fun stop() {
         playJob?.cancel()
+        clearPrefetch()
         currentChapter = null
         _state.update { it.copy(status = Status.IDLE) }
     }
@@ -116,16 +168,23 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
                 continue
             }
 
+            val pcmData = decodeOrTakePrefetch(sentence.id, File(sentence.audioFilePath))
+
+            val nextSentence = sentences.getOrNull(index + 1)
+            if (nextSentence != null && nextSentence.audioStatus == AudioStatus.GENERATED && nextSentence.audioFilePath != null) {
+                startPrefetch(nextSentence.id, File(nextSentence.audioFilePath))
+            }
+
             _state.update { it.copy(sentenceIndex = index, status = Status.PLAYING) }
             repo.updatePosition(chapter.bookId, chapter.orderIndex, index)
-            playWavFile(File(sentence.audioFilePath), _state.value.speed, _state.value.pitch)
+            playAacFile(pcmData, _state.value.speed, _state.value.pitch)
             index++
         }
     }
 
-    /** Blocks (suspends) until the WAV finishes playing at the current speed. */
-    private suspend fun playWavFile(file: File, speed: Float, pitch: Float) {
-        val (sampleRate, pcm) = readWavPcm16(file)
+    /** Blocks (suspends) until the sentence's audio finishes playing at the current speed. */
+    private suspend fun playAacFile(pcmData: Pair<Int, ShortArray>, speed: Float, pitch: Float) {
+        val (sampleRate, pcm) = pcmData
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -151,27 +210,18 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
             track.play()
             val durationMs = (pcm.size.toLong() * 1000L / sampleRate / speed).toLong()
             delay(durationMs)
+            // The nominal PCM duration elapsing doesn't mean the last of it has actually left
+            // the speaker yet — AudioTrack's own output pipeline (HAL buffering) adds a bit more
+            // latency on top. Stopping right on the timer clips that tail on nearly every
+            // sentence; poll the real head position instead, capped so a misbehaving track can't
+            // hang playback indefinitely.
+            val deadline = System.currentTimeMillis() + 300
+            while (track.playbackHeadPosition < pcm.size && System.currentTimeMillis() < deadline) {
+                delay(10)
+            }
         } finally {
             track.stop()
             track.release()
-        }
-    }
-
-    private fun readWavPcm16(file: File): Pair<Int, ShortArray> {
-        RandomAccessFile(file, "r").use { raf ->
-            val header = ByteArray(44)
-            raf.readFully(header)
-            fun le32(off: Int) = (header[off].toInt() and 0xFF) or ((header[off + 1].toInt() and 0xFF) shl 8) or
-                ((header[off + 2].toInt() and 0xFF) shl 16) or ((header[off + 3].toInt() and 0xFF) shl 24)
-            val sampleRate = le32(24)
-            val dataSize = le32(40)
-            val bytes = ByteArray(dataSize)
-            raf.readFully(bytes)
-            val samples = ShortArray(dataSize / 2)
-            for (i in samples.indices) {
-                samples[i] = ((bytes[i * 2].toInt() and 0xFF) or (bytes[i * 2 + 1].toInt() shl 8)).toShort()
-            }
-            return sampleRate to samples
         }
     }
 }

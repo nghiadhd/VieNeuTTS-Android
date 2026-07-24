@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,17 +29,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.vieneu.reader.ReaderApp
 import com.vieneu.reader.data.Chapter
+import kotlinx.coroutines.launch
 
 @Composable
 fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> Unit, onOpenBookVoice: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as ReaderApp
+    val scope = rememberCoroutineScope()
     val book by app.repository.observeBook(bookId).collectAsState(initial = null)
     val chapters by app.repository.observeChapters(bookId).collectAsState(initial = emptyList())
     var progress by remember { mutableStateOf(0 to 0) }
@@ -73,7 +78,17 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
             Text("Chương", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 items(chapters, key = { it.id }) { chapter ->
-                    ChapterRow(chapter, isCurrent = chapter.orderIndex == book?.lastChapterIndex, onClick = { onOpenChapter(chapter.id) })
+                    ChapterRow(
+                        chapter,
+                        isCurrent = chapter.orderIndex == book?.lastChapterIndex,
+                        onClick = { onOpenChapter(chapter.id) },
+                        onDeleteAudio = {
+                            scope.launch {
+                                app.repository.deleteChapterAudio(chapter.id)
+                                app.player.notifyChapterAudioCleared(chapter.id)
+                            }
+                        },
+                    )
                 }
             }
         }
@@ -81,11 +96,30 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
 }
 
 @Composable
-private fun ChapterRow(chapter: Chapter, isCurrent: Boolean, onClick: () -> Unit) {
+private fun ChapterRow(chapter: Chapter, isCurrent: Boolean, onClick: () -> Unit, onDeleteAudio: () -> Unit) {
+    var confirmDelete by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
-        Row(modifier = Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(chapter.title, modifier = Modifier.fillMaxWidth().weight(1f))
-            if (isCurrent) Text("●", color = MaterialTheme.colorScheme.primary)
+            if (isCurrent) Text("●", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
+            IconButton(onClick = { confirmDelete = true }) {
+                Icon(Icons.Filled.Delete, contentDescription = "Xóa giọng đọc đã tạo cho chương này")
+            }
         }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Xóa giọng đọc chương này?") },
+            text = { Text("Giọng đọc đã tạo cho \"${chapter.title}\" sẽ bị xóa và có thể tạo lại sau.") },
+            confirmButton = {
+                TextButton(onClick = { confirmDelete = false; onDeleteAudio() }) { Text("Xóa") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Hủy") }
+            },
+        )
     }
 }

@@ -33,6 +33,9 @@ interface BookDao {
 
     @Query("UPDATE books SET voiceOverride = :voice WHERE id = :bookId")
     suspend fun updateVoiceOverride(bookId: Long, voice: String?)
+
+    @Query("SELECT folderId FROM books")
+    suspend fun getAllFolderIds(): List<String>
 }
 
 @Dao
@@ -48,6 +51,21 @@ interface ChapterDao {
 
     @Query("SELECT * FROM chapters WHERE id = :id")
     suspend fun get(id: Long): Chapter?
+
+    @Query("UPDATE chapters SET audioBytes = audioBytes + :delta WHERE id = :chapterId")
+    suspend fun addAudioBytes(chapterId: Long, delta: Long)
+
+    @Query(
+        "SELECT DISTINCT c.id FROM chapters c JOIN sentences s ON s.chapterId = c.id " +
+            "WHERE c.bookId = :bookId AND c.orderIndex < :keepFrom AND s.audioStatus = 'GENERATED'",
+    )
+    suspend fun getChapterIdsWithGeneratedAudioBefore(bookId: Long, keepFrom: Int): List<Long>
+
+    @Query("UPDATE chapters SET audioBytes = 0 WHERE id = :chapterId")
+    suspend fun clearAudioBytes(chapterId: Long)
+
+    @Query("SELECT COALESCE(SUM(audioBytes), 0) FROM chapters")
+    suspend fun sumAudioBytesAcrossAllBooks(): Long
 }
 
 @Dao
@@ -70,6 +88,9 @@ interface SentenceDao {
     @Query("UPDATE sentences SET audioStatus = 'NOT_GENERATED', audioFilePath = NULL, durationMs = NULL WHERE chapterId IN (SELECT id FROM chapters WHERE bookId = :bookId)")
     suspend fun resetAllForBook(bookId: Long)
 
+    @Query("UPDATE sentences SET audioStatus = 'NOT_GENERATED', audioFilePath = NULL, durationMs = NULL WHERE chapterId = :chapterId")
+    suspend fun resetChapter(chapterId: Long)
+
     @Query(
         "SELECT COUNT(*) FROM sentences WHERE chapterId IN (SELECT id FROM chapters WHERE bookId = :bookId) AND audioStatus = 'GENERATED'",
     )
@@ -77,6 +98,10 @@ interface SentenceDao {
 
     @Query("SELECT COUNT(*) FROM sentences WHERE chapterId IN (SELECT id FROM chapters WHERE bookId = :bookId)")
     suspend fun countTotalForBook(bookId: Long): Int
+
+    /** A sentence stuck at GENERATING means the process died mid-synthesize() — retry it. */
+    @Query("UPDATE sentences SET audioStatus = 'NOT_GENERATED' WHERE audioStatus = 'GENERATING'")
+    suspend fun resetStaleGenerating()
 }
 
 @Dao

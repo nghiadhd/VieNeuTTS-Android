@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.vieneu.engine.TtsEngine
 import com.vieneu.reader.data.AudioStatus
@@ -50,7 +51,13 @@ class TtsGenerationService : Service() {
         super.onCreate()
         repo = BookRepository(applicationContext)
         createNotificationChannel()
-        workerJob = scope.launch { runWorker() }
+        workerJob = scope.launch {
+            // A sentence stuck at GENERATING means the process died mid-synthesize() last
+            // time — reset it before the worker starts picking sentences, or it'd be
+            // permanently skipped (nextUngenerated only ever selects NOT_GENERATED/FAILED).
+            repo.resetStaleGenerating()
+            runWorker()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -87,9 +94,17 @@ class TtsGenerationService : Service() {
 
     private suspend fun runWorker() {
         while (scope.isActive) {
-            val chapterId = highPriorityChapterId.value ?: lowPriorityChapterId.value
+            val highId = highPriorityChapterId.value
+            val lowId = lowPriorityChapterId.value
+            val chapterId = highId ?: lowId
             if (chapterId == null) {
                 delay(500)
+                continue
+            }
+            // Budget check only ever gates background look-ahead — the chapter the user is
+            // actively listening to (high priority) must never stall on storage bookkeeping.
+            if (highId == null && !repo.hasStorageBudget()) {
+                lowPriorityChapterId.value = null
                 continue
             }
             val sentence = nextUngenerated(chapterId)
@@ -120,13 +135,23 @@ class TtsGenerationService : Service() {
             val e = getOrCreateEngine()
             val voice = book.voiceOverride ?: repo.getSettingsOrDefault(e.listVoices().first()).defaultVoice
             val audio = e.synthesize(sentence.text, voice)
-            val outFile = File(repo.audioDir(bookId), "ch${chapter.orderIndex}_s${sentence.orderIndex}.wav")
-            WavWriter.write(outFile, audio)
+            val outFile = File(repo.audioDir(book.folderId, chapter.orderIndex), "s${sentence.orderIndex}.m4a")
+            AacWriter.write(outFile, audio)
             val durationMs = (audio.size * 1000L / 48000L).toInt()
-            repo.markGenerated(sentence.id, outFile.absolutePath, durationMs)
+            repo.markGenerated(chapterId, sentence.id, outFile.name, durationMs)
             updateNotification(book, chapter)
+        } catch (e: OutOfMemoryError) {
+            // The process is in an unknown state after an OOM — the very next synthesize()
+            // would likely OOM again immediately. Drop background look-ahead and force a
+            // fresh engine on the next attempt instead of looping straight back into trouble.
+            Log.e("TtsGenerationService", "generateOne OOM for sentenceId=${sentence.id}", e)
+            repo.markFailed(chapterId, sentence.id)
+            lowPriorityChapterId.value = null
+            engine?.close()
+            engine = null
         } catch (t: Throwable) {
-            repo.markFailed(sentence.id)
+            Log.e("TtsGenerationService", "generateOne failed for sentenceId=${sentence.id}", t)
+            repo.markFailed(chapterId, sentence.id)
         }
     }
 

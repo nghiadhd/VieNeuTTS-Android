@@ -17,7 +17,7 @@ class Converters {
 
 @Database(
     entities = [Book::class, Chapter::class, Sentence::class, AppSettings::class],
-    version = 1,
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -33,6 +33,10 @@ abstract class ReaderDatabase : RoomDatabase() {
         fun get(context: Context): ReaderDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context.applicationContext, ReaderDatabase::class.java, "reader.db")
+                    // Pre-release app, no shipped Migration path yet — schema bumps wipe local
+                    // data instead; on-disk chapter metadata (see BookRepository.reconcileFromDisk)
+                    // is what lets already-generated audio survive a wipe like this one.
+                    .fallbackToDestructiveMigration()
                     .build()
                     .also { instance = it }
             }

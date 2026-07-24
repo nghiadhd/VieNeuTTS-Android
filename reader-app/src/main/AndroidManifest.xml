@@ -7,6 +7,7 @@
         android:name=".ReaderApp"
         android:allowBackup="false"
         android:label="VieNeu Reader"
+        android:largeHeap="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"

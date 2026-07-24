@@ -10,6 +10,8 @@ enum class AudioStatus { NOT_GENERATED, GENERATING, GENERATED, FAILED }
 @Entity(tableName = "books")
 data class Book(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Stable UUID, independent of [id] — the on-disk folder name, so recovery survives a Room DB loss/reinstall. */
+    val folderId: String,
     val title: String,
     val author: String?,
     val epubFilePath: String,
@@ -32,6 +34,10 @@ data class Chapter(
     val orderIndex: Int,
     val title: String,
     val sentenceCount: Int,
+    /** Running total of this chapter's generated-audio file sizes — kept incrementally so
+     * checking the global storage budget is a SUM query, not a filesystem walk over
+     * potentially thousands of sentence files across every book. */
+    val audioBytes: Long = 0,
 )
 
 @Entity(
@@ -58,4 +64,9 @@ data class AppSettings(
     val defaultPitch: Float = 1.0f,
     val autoAdvanceChapter: Boolean = true,
     val sleepTimerMinutes: Int? = null,
+    /** Auto-delete a chapter's audio once the reading cursor moves more than this many chapters past it. */
+    val autoRetentionEnabled: Boolean = true,
+    val retentionLookBehindChapters: Int = 1,
+    /** Background (low-priority) pre-generation pauses once total audio on disk exceeds this — never deletes to make room, just stops generating further ahead. */
+    val storageBudgetMb: Int = 2048,
 )

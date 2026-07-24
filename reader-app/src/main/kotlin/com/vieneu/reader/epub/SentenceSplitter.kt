@@ -14,15 +14,62 @@ package com.vieneu.reader.epub
  * splitting mid-decimal-number (`4.200,5`) or mid-abbreviation (`v.v.`)
  * since a period is only a boundary when immediately followed by
  * whitespace or the end of the paragraph.
+ *
+ * A "sentence" this finds can still be arbitrarily long — real chapter text
+ * sometimes runs for a whole long paragraph of dialogue with no `.!?…`, and
+ * each sentence here becomes one uncapped `TtsEngine.synthesize()` call.
+ * [MAX_CHARS] (matching VieNeu-TTS's own Python chunker's `max_chars=256`
+ * default in `split_text_into_chunks`) bounds that: an oversized sentence is
+ * forced into multiple sub-chunks the same way the Python chunker does —
+ * split on minor punctuation (`, ; : - – —`) first, falling back to word
+ * boundaries if even a comma-separated piece is still too long.
  */
 object SentenceSplitter {
     private val ABBREVIATIONS = setOf("ts", "ths", "gs", "pgs", "vs", "tp", "q", "no")
+    private const val MAX_CHARS = 256
+    private val MINOR_PUNCT_BOUNDARY = Regex("(?<=[,;:\\-–—])\\s+")
 
     fun split(text: String): List<String> {
         val paragraphs = text.split(Regex("\\r?\\n+")).map { it.trim() }.filter { it.isNotEmpty() }
         val sentences = mutableListOf<String>()
-        for (paragraph in paragraphs) sentences.addAll(splitParagraph(paragraph))
+        for (paragraph in paragraphs) {
+            for (sentence in splitParagraph(paragraph)) sentences.addAll(capLength(sentence))
+        }
         return sentences
+    }
+
+    private fun capLength(sentence: String): List<String> {
+        if (sentence.length <= MAX_CHARS) return listOf(sentence)
+
+        val chunks = mutableListOf<String>()
+        var buffer = ""
+        for (part in sentence.split(MINOR_PUNCT_BOUNDARY).map { it.trim() }.filter { it.isNotEmpty() }) {
+            if (part.length > MAX_CHARS) {
+                if (buffer.isNotEmpty()) { chunks.add(buffer); buffer = "" }
+                chunks.addAll(splitByWords(part))
+            } else if (buffer.isNotEmpty() && buffer.length + 1 + part.length > MAX_CHARS) {
+                chunks.add(buffer)
+                buffer = part
+            } else {
+                buffer = if (buffer.isEmpty()) part else "$buffer $part"
+            }
+        }
+        if (buffer.isNotEmpty()) chunks.add(buffer)
+        return chunks
+    }
+
+    private fun splitByWords(text: String): List<String> {
+        val chunks = mutableListOf<String>()
+        var current = ""
+        for (word in text.split(Regex("\\s+")).filter { it.isNotEmpty() }) {
+            current = when {
+                current.isEmpty() -> word
+                current.length + 1 + word.length > MAX_CHARS -> { chunks.add(current); word }
+                else -> "$current $word"
+            }
+        }
+        if (current.isNotEmpty()) chunks.add(current)
+        return chunks
     }
 
     private fun splitParagraph(paragraph: String): List<String> {
