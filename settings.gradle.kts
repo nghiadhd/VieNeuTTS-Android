@@ -23,3 +23,4 @@ dependencyResolutionManagement {
 rootProject.name = "VieNeuTTS-Android"
 include(":engine")
 include(":app-sample")
+include(":reader-app")
