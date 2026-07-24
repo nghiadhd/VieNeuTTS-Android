@@ -4,8 +4,7 @@ package com.vieneu.reader.epub
  * Lightweight, rule-based sentence splitter for Vietnamese (and mixed
  * Vietnamese/English) chapter text. Not linguistically perfect — VieNeu-TTS's
  * own Python chunker isn't either (it chunks by character count, not true
- * sentence boundaries) — good enough to produce the ~150-sentence/chapter
- * granularity the buffer-ahead algorithm operates on.
+ * sentence boundaries).
  *
  * Splits on `. ! ? …` followed by whitespace, keeping the terminating
  * punctuation attached to the sentence it ends. Guards against splitting on
@@ -15,14 +14,19 @@ package com.vieneu.reader.epub
  * since a period is only a boundary when immediately followed by
  * whitespace or the end of the paragraph.
  *
- * A "sentence" this finds can still be arbitrarily long — real chapter text
- * sometimes runs for a whole long paragraph of dialogue with no `.!?…`, and
- * each sentence here becomes one uncapped `TtsEngine.synthesize()` call.
- * [MAX_CHARS] (matching VieNeu-TTS's own Python chunker's `max_chars=256`
- * default in `split_text_into_chunks`) bounds that: an oversized sentence is
- * forced into multiple sub-chunks the same way the Python chunker does —
- * split on minor punctuation (`, ; : - – —`) first, falling back to word
- * boundaries if even a comma-separated piece is still too long.
+ * Each row this returns becomes one `TtsEngine.synthesize()` call, so after
+ * splitting, adjacent sentences within the same paragraph are merged back
+ * together up to [MAX_CHARS] (matching VieNeu-TTS's own Python chunker's
+ * `max_chars=256` in `normalize_to_chunks_v3`) — synthesizing one isolated
+ * sentence at a time (sometimes a single word, e.g. "- Hừ!") starves the
+ * model of the surrounding context it needs for natural, varied intonation;
+ * the Python reference's own noticeably more expressive prosody comes from
+ * feeding it whole ~256-char passages per inference call instead. A
+ * paragraph break is still a real pause boundary and is never merged across.
+ * An individual oversized sentence is still forced into multiple sub-chunks
+ * the same way the Python chunker does — split on minor punctuation
+ * (`, ; : - – —`) first, falling back to word boundaries if even a
+ * comma-separated piece is still too long.
  */
 object SentenceSplitter {
     private val ABBREVIATIONS = setOf("ts", "ths", "gs", "pgs", "vs", "tp", "q", "no")
@@ -33,9 +37,28 @@ object SentenceSplitter {
         val paragraphs = text.split(Regex("\\r?\\n+")).map { it.trim() }.filter { it.isNotEmpty() }
         val sentences = mutableListOf<String>()
         for (paragraph in paragraphs) {
-            for (sentence in splitParagraph(paragraph)) sentences.addAll(capLength(sentence))
+            val capped = splitParagraph(paragraph).flatMap { capLength(it) }
+            sentences.addAll(mergeAdjacent(capped))
         }
         return sentences
+    }
+
+    /** See the class doc comment for why adjacent sentences are merged back together. */
+    private fun mergeAdjacent(sentences: List<String>): List<String> {
+        val merged = mutableListOf<String>()
+        var buffer = ""
+        for (sentence in sentences) {
+            buffer = when {
+                buffer.isEmpty() -> sentence
+                buffer.length + 1 + sentence.length <= MAX_CHARS -> "$buffer $sentence"
+                else -> {
+                    merged.add(buffer)
+                    sentence
+                }
+            }
+        }
+        if (buffer.isNotEmpty()) merged.add(buffer)
+        return merged
     }
 
     private fun capLength(sentence: String): List<String> {

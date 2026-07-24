@@ -6,13 +6,13 @@ import org.junit.Test
 
 class SentenceSplitterTest {
     @Test
-    fun splitsBasicSentences() {
+    fun mergesAdjacentShortSentencesForRicherTtsContext() {
+        // Two short sentences in the same paragraph, well under MAX_CHARS combined — merged
+        // into a single synthesize() call instead of two isolated ones, so the model gets a
+        // full passage of context instead of one sentence (sometimes one word) at a time.
         val text = "Trong màn mưa mùa hạ rền vang sấm sét. Một chiếc Porche màu đen chạy trên đường."
         assertEquals(
-            listOf(
-                "Trong màn mưa mùa hạ rền vang sấm sét.",
-                "Một chiếc Porche màu đen chạy trên đường.",
-            ),
+            listOf("Trong màn mưa mùa hạ rền vang sấm sét. Một chiếc Porche màu đen chạy trên đường."),
             SentenceSplitter.split(text),
         )
     }
@@ -21,7 +21,7 @@ class SentenceSplitterTest {
     fun handlesQuestionAndExclamation() {
         val text = "Vậy tương lai của tôi ở đâu? Nhà tù. Nói nhăng nói cuội cái gì đó!"
         assertEquals(
-            listOf("Vậy tương lai của tôi ở đâu?", "Nhà tù.", "Nói nhăng nói cuội cái gì đó!"),
+            listOf("Vậy tương lai của tôi ở đâu? Nhà tù. Nói nhăng nói cuội cái gì đó!"),
             SentenceSplitter.split(text),
         )
     }
@@ -30,7 +30,7 @@ class SentenceSplitterTest {
     fun doesNotSplitOnDecimalNumbers() {
         val text = "Giá SP500 hôm nay là 4.200,5 điểm. Tăng nhẹ so với hôm qua."
         assertEquals(
-            listOf("Giá SP500 hôm nay là 4.200,5 điểm.", "Tăng nhẹ so với hôm qua."),
+            listOf("Giá SP500 hôm nay là 4.200,5 điểm. Tăng nhẹ so với hôm qua."),
             SentenceSplitter.split(text),
         )
     }
@@ -39,16 +39,16 @@ class SentenceSplitterTest {
     fun ellipsisIsATerminatorLikeAnyOther() {
         val text = "Cô ấy dừng lại một chút… Rồi tiếp tục nói."
         assertEquals(
-            listOf("Cô ấy dừng lại một chút…", "Rồi tiếp tục nói."),
+            listOf("Cô ấy dừng lại một chút… Rồi tiếp tục nói."),
             SentenceSplitter.split(text),
         )
     }
 
     @Test
-    fun splitsOnParagraphBreaksToo() {
+    fun mergesWithinAParagraphButNeverAcrossAParagraphBreak() {
         val text = "Đoạn một.\n\nĐoạn hai có hai câu. Câu thứ hai."
         assertEquals(
-            listOf("Đoạn một.", "Đoạn hai có hai câu.", "Câu thứ hai."),
+            listOf("Đoạn một.", "Đoạn hai có hai câu. Câu thứ hai."),
             SentenceSplitter.split(text),
         )
     }
@@ -90,5 +90,19 @@ class SentenceSplitterTest {
     fun leavesShortSentencesUntouched() {
         val text = "Câu ngắn thôi."
         assertEquals(listOf("Câu ngắn thôi."), SentenceSplitter.split(text))
+    }
+
+    @Test
+    fun mergingNeverExceedsMaxChars() {
+        // Many short sentences in one paragraph — merged for context, but never into a single
+        // chunk bigger than the model's own max_chars, and no words dropped or duplicated.
+        val text = (1..40).joinToString(" ") { "Câu ngắn số $it." }
+        val result = SentenceSplitter.split(text)
+
+        assertTrue(result.size > 1, "expected merging to still produce multiple chunks, not one giant blob")
+        result.forEach { assertTrue(it.length <= 256, "merged chunk exceeds cap: '$it' (${it.length} chars)") }
+        val wordCount = result.joinToString(" ").split(Regex("\\s+")).count { it.isNotBlank() }
+        val expectedWordCount = text.split(Regex("\\s+")).count { it.isNotBlank() }
+        assertEquals(expectedWordCount, wordCount, "no words should be dropped or duplicated by merging")
     }
 }

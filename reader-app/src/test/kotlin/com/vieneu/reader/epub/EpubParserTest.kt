@@ -26,8 +26,9 @@ class EpubParserTest {
     fun chapterTextFeedsCleanlyIntoSentenceSplitter() {
         val book = File("src/test/resources/sample.epub").inputStream().use { EpubParser.parse(it) }
         val sentences = SentenceSplitter.split(book.chapters[0].plainText)
-        assertEquals(2, sentences.size)
-        assertEquals("Day la cau dau tien cua chuong mot.", sentences[0])
-        assertEquals("Day la cau thu hai.", sentences[1])
+        // Both short sentences are in the same paragraph and well under the merge cap, so they
+        // become a single chunk — see SentenceSplitter's doc comment for why.
+        assertEquals(1, sentences.size)
+        assertEquals("Day la cau dau tien cua chuong mot. Day la cau thu hai.", sentences[0])
     }
 }
