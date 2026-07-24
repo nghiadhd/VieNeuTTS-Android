@@ -138,6 +138,16 @@ class TtsGenerationService : Service() {
             val e = getOrCreateEngine()
             val voice = book.voiceOverride ?: repo.getSettingsOrDefault(e.listVoices().first()).defaultVoice
             val audio = e.synthesize(sentence.text, voice)
+            // synthesize() is a real 7-15s CPU-bound call — if the book's voice override
+            // changed while it was running, repo.setVoiceOverride already reset this sentence
+            // back to NOT_GENERATED and deleted its audio out from under us. Writing this
+            // (now-stale, wrong-voice) result and marking it generated would silently
+            // resurrect it, undoing that reset for exactly this one sentence while every other
+            // sentence correctly regenerates with the new voice. Discard instead — it's already
+            // NOT_GENERATED, so the worker picks it up again naturally on the next pass.
+            val currentVoice = repo.getBookOnce(bookId)?.voiceOverride
+                ?: repo.getSettingsOrDefault(e.listVoices().first()).defaultVoice
+            if (currentVoice != voice) return
             val outFile = File(repo.audioDir(book.folderId, chapter.orderIndex), "s${sentence.orderIndex}.m4a")
             AacWriter.write(outFile, audio)
             val durationMs = (audio.size * 1000L / 48000L).toInt()
