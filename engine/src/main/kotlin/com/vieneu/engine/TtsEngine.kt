@@ -89,6 +89,14 @@ class TtsEngine private constructor(
         )
 
         /**
+         * The 14 preset voice names, without paying [create]'s cost (asset
+         * copy + loading 4 ONNX sessions) — for UI like a voice picker that
+         * just needs the list, not a working engine.
+         */
+        fun listVoicesLightweight(context: Context): List<String> =
+            loadVoices(context).keys.toList()
+
+        /**
          * Copies the bundled model assets out of the read-only APK into
          * app-private storage once (ONNX Runtime and the Rust G2P core both
          * need real filesystem paths — mmap/external-data can't work
