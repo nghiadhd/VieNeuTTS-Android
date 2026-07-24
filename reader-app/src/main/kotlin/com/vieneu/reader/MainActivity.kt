@@ -62,11 +62,15 @@ class MainActivity : ComponentActivity() {
                                 bookId = bookId,
                                 chapterId = chapterId,
                                 onBack = { navController.popBackStack() },
-                                onOpenSpeechSettings = { navController.navigate(Routes.SPEECH_SETTINGS) },
+                                onOpenSpeechSettings = { navController.navigate(Routes.speechSettings(bookId)) },
                             )
                         }
-                        composable(Routes.SPEECH_SETTINGS) {
-                            SpeechSettingsScreen(onBack = { navController.popBackStack() })
+                        composable(
+                            Routes.SPEECH_SETTINGS,
+                            arguments = listOf(navArgument("bookId") { type = NavType.LongType }),
+                        ) { entry ->
+                            val bookId = entry.arguments!!.getLong("bookId")
+                            SpeechSettingsScreen(bookId = bookId, onBack = { navController.popBackStack() })
                         }
                         composable(
                             Routes.BOOK_VOICE,
