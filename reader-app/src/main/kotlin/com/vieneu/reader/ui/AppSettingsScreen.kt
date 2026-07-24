@@ -40,6 +40,7 @@ import com.vieneu.reader.data.AppSettings
 import kotlinx.coroutines.launch
 
 private val STORAGE_BUDGET_PRESETS_MB = listOf(1024, 2048, 4096, 8192)
+private val SUBTITLE_FONT_SCALE_PRESETS = listOf(0.85f to "Nhỏ", 1.0f to "Vừa", 1.25f to "Lớn", 1.5f to "Rất lớn")
 
 @Composable
 fun AppSettingsScreen(onBack: () -> Unit) {
@@ -94,6 +95,19 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                     TextButton(onClick = { update { it.copy(storageBudgetMb = mb) } }) {
                         val label = if (mb >= 1024) "${mb / 1024}GB" else "${mb}MB"
                         Text(if (settings?.storageBudgetMb == mb) "[$label]" else label)
+                    }
+                }
+            }
+
+            Text(
+                "Cỡ chữ khi nghe",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
+            )
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                SUBTITLE_FONT_SCALE_PRESETS.forEach { (scale, label) ->
+                    TextButton(onClick = { update { it.copy(subtitleFontScale = scale) } }) {
+                        Text(if (settings?.subtitleFontScale == scale) "[$label]" else label)
                     }
                 }
             }

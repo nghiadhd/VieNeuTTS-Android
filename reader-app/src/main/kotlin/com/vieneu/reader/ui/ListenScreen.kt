@@ -52,6 +52,8 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
     val chapter = chapters.find { it.id == chapterId }
     val sentences by app.repository.observeSentences(chapterId).collectAsState(initial = emptyList())
     val playerState by app.player.state.collectAsState()
+    val settings by app.repository.observeSettings().collectAsState(initial = null)
+    val subtitleFontScale = settings?.subtitleFontScale ?: 1.0f
 
     // Start high-priority generation for this chapter, and kick off the next
     // chapter in the background (low priority) — design spec §2/§4.
@@ -118,7 +120,12 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
                 modifier = Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(currentText, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    currentText,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = MaterialTheme.typography.bodyLarge.fontSize * subtitleFontScale,
+                    ),
+                )
             }
 
             Text("Câu ${displayedIndex + 1} / $total", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp))

@@ -69,4 +69,6 @@ data class AppSettings(
     val retentionLookBehindChapters: Int = 1,
     /** Background (low-priority) pre-generation pauses once total audio on disk exceeds this — never deletes to make room, just stops generating further ahead. */
     val storageBudgetMb: Int = 2048,
+    /** Multiplier on the base subtitle text size in ListenScreen (1.0 = normal). */
+    val subtitleFontScale: Float = 1.0f,
 )

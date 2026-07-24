@@ -17,7 +17,7 @@ class Converters {
 
 @Database(
     entities = [Book::class, Chapter::class, Sentence::class, AppSettings::class],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
