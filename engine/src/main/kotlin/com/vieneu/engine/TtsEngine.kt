@@ -33,8 +33,14 @@ class TtsEngine private constructor(
 
     private class Voice(val speakerEmb: FloatArray, val codes: Array<IntArray>, val style: String)
 
-    /** Mirrors `sea_g2p.SEAPipeline.run(text, punc_norm=True)` used by VieNeu-TTS's phonemizer. */
-    fun phonemize(text: String): String = g2p.run(text, true)
+    /**
+     * Mirrors `phonemize_text_with_emotions`: normalizes + phonemizes,
+     * preserving inline `[cười]`/`[thở dài]`/`[hắng giọng]` cues as the
+     * `<|emotion_k|>` control tokens the model was trained on (see
+     * [EmotionPhonemizer]). Falls back to plain `SEAPipeline.run` when the
+     * text has no such cues.
+     */
+    fun phonemize(text: String): String = EmotionPhonemizer.phonemize(g2p, text)
 
     fun listVoices(): List<String> = voices.keys.toList()
 
