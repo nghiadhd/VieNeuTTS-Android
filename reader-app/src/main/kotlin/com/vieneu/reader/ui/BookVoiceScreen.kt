@@ -38,10 +38,12 @@ import com.vieneu.engine.TtsEngine
 import com.vieneu.reader.ReaderApp
 import kotlinx.coroutines.launch
 
-private const val SUBTITLE_FONT_SCALE_MIN = 0.75f
+private const val SUBTITLE_FONT_SCALE_MIN = 0.7f
 private const val SUBTITLE_FONT_SCALE_MAX = 2.0f
+private const val SUBTITLE_FONT_SCALE_STEPS = 12 // 0.7, 0.8, ..., 2.0 in steps of 0.1
 private const val SUBTITLE_LINE_SPACING_MIN = 1.0f
 private const val SUBTITLE_LINE_SPACING_MAX = 2.0f
+private const val SUBTITLE_LINE_SPACING_STEPS = 9 // 1.0, 1.1, ..., 2.0 in steps of 0.1
 
 /**
  * Per-book settings, independent of the app-wide defaults (design spec §5): voice, subtitle
@@ -89,6 +91,7 @@ fun BookVoiceScreen(bookId: Long, onBack: () -> Unit) {
                 value = effectiveFontScale,
                 onValueChange = { scope.launch { app.repository.setSubtitleFontScaleOverride(bookId, it) } },
                 valueRange = SUBTITLE_FONT_SCALE_MIN..SUBTITLE_FONT_SCALE_MAX,
+                steps = SUBTITLE_FONT_SCALE_STEPS,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 
@@ -107,6 +110,7 @@ fun BookVoiceScreen(bookId: Long, onBack: () -> Unit) {
                 value = effectiveLineSpacing,
                 onValueChange = { scope.launch { app.repository.setSubtitleLineSpacingOverride(bookId, it) } },
                 valueRange = SUBTITLE_LINE_SPACING_MIN..SUBTITLE_LINE_SPACING_MAX,
+                steps = SUBTITLE_LINE_SPACING_STEPS,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 

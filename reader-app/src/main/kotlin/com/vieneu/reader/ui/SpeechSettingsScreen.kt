@@ -46,6 +46,7 @@ fun SpeechSettingsScreen(onBack: () -> Unit) {
                 value = playerState.speed,
                 onValueChange = { app.player.setSpeedPitch(it, playerState.pitch) },
                 valueRange = 0.5f..2.0f,
+                steps = 14, // 0.5, 0.6, 0.7, ..., 2.0 in steps of 0.1
             )
 
             Text("Cao độ giọng: ${"%.2f".format(playerState.pitch)}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp))
@@ -53,6 +54,7 @@ fun SpeechSettingsScreen(onBack: () -> Unit) {
                 value = playerState.pitch,
                 onValueChange = { app.player.setSpeedPitch(playerState.speed, it) },
                 valueRange = 0.5f..1.5f,
+                steps = 9, // 0.5, 0.6, ..., 1.5 in steps of 0.1
             )
 
             Row(

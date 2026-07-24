@@ -39,10 +39,12 @@ import com.vieneu.reader.ReaderApp
 import com.vieneu.reader.data.AppSettings
 import kotlinx.coroutines.launch
 
-private const val SUBTITLE_FONT_SCALE_MIN = 0.75f
+private const val SUBTITLE_FONT_SCALE_MIN = 0.7f
 private const val SUBTITLE_FONT_SCALE_MAX = 2.0f
+private const val SUBTITLE_FONT_SCALE_STEPS = 12 // 0.7, 0.8, ..., 2.0 in steps of 0.1
 private const val SUBTITLE_LINE_SPACING_MIN = 1.0f
 private const val SUBTITLE_LINE_SPACING_MAX = 2.0f
+private const val SUBTITLE_LINE_SPACING_STEPS = 9 // 1.0, 1.1, ..., 2.0 in steps of 0.1
 
 @Composable
 fun AppSettingsScreen(onBack: () -> Unit) {
@@ -97,6 +99,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 value = settings?.subtitleFontScale ?: 1.0f,
                 onValueChange = { update { s -> s.copy(subtitleFontScale = it) } },
                 valueRange = SUBTITLE_FONT_SCALE_MIN..SUBTITLE_FONT_SCALE_MAX,
+                steps = SUBTITLE_FONT_SCALE_STEPS,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
             Text(
@@ -108,6 +111,7 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                 value = settings?.subtitleLineSpacing ?: 1.0f,
                 onValueChange = { update { s -> s.copy(subtitleLineSpacing = it) } },
                 valueRange = SUBTITLE_LINE_SPACING_MIN..SUBTITLE_LINE_SPACING_MAX,
+                steps = SUBTITLE_LINE_SPACING_STEPS,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 
