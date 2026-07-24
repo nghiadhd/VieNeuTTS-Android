@@ -18,9 +18,9 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,8 +39,10 @@ import com.vieneu.reader.ReaderApp
 import com.vieneu.reader.data.AppSettings
 import kotlinx.coroutines.launch
 
-private val SUBTITLE_FONT_SCALE_PRESETS = listOf(0.85f to "Nhỏ", 1.0f to "Vừa", 1.25f to "Lớn", 1.5f to "Rất lớn")
-private val SUBTITLE_LINE_SPACING_PRESETS = listOf(1.0f to "Hẹp", 1.3f to "Vừa", 1.6f to "Rộng")
+private const val SUBTITLE_FONT_SCALE_MIN = 0.75f
+private const val SUBTITLE_FONT_SCALE_MAX = 2.0f
+private const val SUBTITLE_LINE_SPACING_MIN = 1.0f
+private const val SUBTITLE_LINE_SPACING_MAX = 2.0f
 
 @Composable
 fun AppSettingsScreen(onBack: () -> Unit) {
@@ -87,29 +89,27 @@ fun AppSettingsScreen(onBack: () -> Unit) {
             }
 
             Text(
-                "Cỡ chữ khi nghe",
+                "Cỡ chữ khi nghe: ${"%.2f".format(settings?.subtitleFontScale ?: 1.0f)}x",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
             )
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                SUBTITLE_FONT_SCALE_PRESETS.forEach { (scale, label) ->
-                    TextButton(onClick = { update { it.copy(subtitleFontScale = scale) } }) {
-                        Text(if (settings?.subtitleFontScale == scale) "[$label]" else label)
-                    }
-                }
-            }
+            Slider(
+                value = settings?.subtitleFontScale ?: 1.0f,
+                onValueChange = { update { s -> s.copy(subtitleFontScale = it) } },
+                valueRange = SUBTITLE_FONT_SCALE_MIN..SUBTITLE_FONT_SCALE_MAX,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
             Text(
-                "Dãn dòng",
-                style = MaterialTheme.typography.bodyMedium,
+                "Dãn dòng: ${"%.2f".format(settings?.subtitleLineSpacing ?: 1.0f)}x",
+                style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
             )
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
-                SUBTITLE_LINE_SPACING_PRESETS.forEach { (spacing, label) ->
-                    TextButton(onClick = { update { it.copy(subtitleLineSpacing = spacing) } }) {
-                        Text(if (settings?.subtitleLineSpacing == spacing) "[$label]" else label)
-                    }
-                }
-            }
+            Slider(
+                value = settings?.subtitleLineSpacing ?: 1.0f,
+                onValueChange = { update { s -> s.copy(subtitleLineSpacing = it) } },
+                valueRange = SUBTITLE_LINE_SPACING_MIN..SUBTITLE_LINE_SPACING_MAX,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
 
             Text(
                 "Giọng đọc mặc định cho sách mới",

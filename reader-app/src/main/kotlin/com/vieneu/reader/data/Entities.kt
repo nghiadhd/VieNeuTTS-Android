@@ -18,6 +18,10 @@ data class Book(
     val coverPath: String?,
     /** Null = use [AppSettings.defaultVoice]. */
     val voiceOverride: String?,
+    /** Null = use [AppSettings.subtitleFontScale]. */
+    val subtitleFontScaleOverride: Float? = null,
+    /** Null = use [AppSettings.subtitleLineSpacing]. */
+    val subtitleLineSpacingOverride: Float? = null,
     val lastChapterIndex: Int = 0,
     val lastSentenceIndex: Int = 0,
     val addedAt: Long,

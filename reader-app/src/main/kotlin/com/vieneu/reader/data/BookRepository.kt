@@ -141,6 +141,15 @@ class BookRepository(private val context: Context) {
         writeBookMetadata(book.copy(voiceOverride = voice))
     }
 
+    /** Per-book display prefs — unlike [setVoiceOverride], these never affect generated audio. */
+    suspend fun setSubtitleFontScaleOverride(bookId: Long, scale: Float?) = withContext(Dispatchers.IO) {
+        bookDao.updateSubtitleFontScaleOverride(bookId, scale)
+    }
+
+    suspend fun setSubtitleLineSpacingOverride(bookId: Long, spacing: Float?) = withContext(Dispatchers.IO) {
+        bookDao.updateSubtitleLineSpacingOverride(bookId, spacing)
+    }
+
     suspend fun deleteBook(bookId: Long) = withContext(Dispatchers.IO) {
         val book = bookDao.get(bookId) ?: return@withContext
         bookDao.delete(book)

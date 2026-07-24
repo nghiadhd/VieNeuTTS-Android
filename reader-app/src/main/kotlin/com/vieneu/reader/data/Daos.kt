@@ -34,6 +34,12 @@ interface BookDao {
     @Query("UPDATE books SET voiceOverride = :voice WHERE id = :bookId")
     suspend fun updateVoiceOverride(bookId: Long, voice: String?)
 
+    @Query("UPDATE books SET subtitleFontScaleOverride = :scale WHERE id = :bookId")
+    suspend fun updateSubtitleFontScaleOverride(bookId: Long, scale: Float?)
+
+    @Query("UPDATE books SET subtitleLineSpacingOverride = :spacing WHERE id = :bookId")
+    suspend fun updateSubtitleLineSpacingOverride(bookId: Long, spacing: Float?)
+
     @Query("SELECT folderId FROM books")
     suspend fun getAllFolderIds(): List<String>
 }
