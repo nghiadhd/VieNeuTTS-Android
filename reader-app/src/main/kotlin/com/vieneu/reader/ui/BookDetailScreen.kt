@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -107,7 +108,6 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
                     val queuePosition = generationStatus.queuedChapterIds.indexOf(chapter.id).takeIf { it >= 0 }
                     ChapterRow(
                         chapter,
-                        isCurrent = chapter.orderIndex == book?.lastChapterIndex,
                         listenPercent = listenPercent,
                         generatedCount = generatedCount,
                         isActivelyGenerating = generationStatus.activeChapterId == chapter.id,
@@ -126,6 +126,13 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
                                     .putExtra(TtsGenerationService.EXTRA_CHAPTER_ID, chapter.id),
                             )
                         },
+                        onAddToGenerationQueue = {
+                            context.startService(
+                                Intent(context, TtsGenerationService::class.java)
+                                    .setAction(TtsGenerationService.ACTION_ADD_LOW_PRIORITY_CHAPTER)
+                                    .putExtra(TtsGenerationService.EXTRA_CHAPTER_ID, chapter.id),
+                            )
+                        },
                     )
                 }
             }
@@ -136,7 +143,6 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
 @Composable
 private fun ChapterRow(
     chapter: Chapter,
-    isCurrent: Boolean,
     listenPercent: Int,
     generatedCount: Int,
     isActivelyGenerating: Boolean,
@@ -144,6 +150,7 @@ private fun ChapterRow(
     onClick: () -> Unit,
     onDeleteAudio: () -> Unit,
     onStopGenerating: () -> Unit,
+    onAddToGenerationQueue: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     val genStatus = when {
@@ -165,10 +172,14 @@ private fun ChapterRow(
                     color = MaterialTheme.colorScheme.secondary,
                 )
             }
-            if (isCurrent) Text("●", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
+            val isFullyGenerated = chapter.sentenceCount > 0 && generatedCount >= chapter.sentenceCount
             if (isActivelyGenerating || queuePosition != null) {
                 IconButton(onClick = onStopGenerating) {
                     Icon(Icons.Filled.Stop, contentDescription = "Dừng tạo giọng đọc cho chương này")
+                }
+            } else if (!isFullyGenerated && chapter.sentenceCount > 0) {
+                IconButton(onClick = onAddToGenerationQueue) {
+                    Icon(Icons.Filled.PlaylistAdd, contentDescription = "Thêm vào hàng đợi tạo giọng đọc")
                 }
             }
             IconButton(onClick = { confirmDelete = true }) {

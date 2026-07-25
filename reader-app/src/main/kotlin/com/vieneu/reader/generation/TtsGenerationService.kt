@@ -97,6 +97,17 @@ class TtsGenerationService : Service() {
                 lowPriorityQueue.value = intent.getLongArrayExtra(EXTRA_CHAPTER_IDS)?.toList() ?: emptyList()
                 startForeground(NOTIFICATION_ID, buildNotification("Đang tạo giọng đọc…"))
             }
+            ACTION_ADD_LOW_PRIORITY_CHAPTER -> {
+                // Unlike ACTION_SET_LOW_PRIORITY_CHAPTERS (a replace, driven automatically by
+                // ListenScreen navigation), this appends one chapter — for the manual "generate
+                // this chapter" button in BookDetailScreen's chapter list, which shouldn't blow
+                // away whatever the reader is currently listening through.
+                val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1).takeIf { it >= 0 }
+                if (chapterId != null) {
+                    lowPriorityQueue.update { queue -> if (chapterId in queue) queue else queue + chapterId }
+                }
+                startForeground(NOTIFICATION_ID, buildNotification("Đang tạo giọng đọc…"))
+            }
             ACTION_STOP_CHAPTER -> {
                 val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1)
                 if (highPriorityChapterId.value == chapterId) highPriorityChapterId.value = null
@@ -224,6 +235,7 @@ class TtsGenerationService : Service() {
     companion object {
         const val ACTION_GENERATE_HIGH_PRIORITY = "com.vieneu.reader.GENERATE_HIGH"
         const val ACTION_SET_LOW_PRIORITY_CHAPTERS = "com.vieneu.reader.SET_LOW_PRIORITY_CHAPTERS"
+        const val ACTION_ADD_LOW_PRIORITY_CHAPTER = "com.vieneu.reader.ADD_LOW_PRIORITY_CHAPTER"
         const val ACTION_STOP_CHAPTER = "com.vieneu.reader.STOP_CHAPTER"
         const val ACTION_STOP_ALL = "com.vieneu.reader.STOP_ALL"
         const val EXTRA_CHAPTER_ID = "chapterId"
