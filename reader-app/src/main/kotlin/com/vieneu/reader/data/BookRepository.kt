@@ -56,6 +56,11 @@ class BookRepository(private val context: Context) {
     suspend fun getSettingsOrDefault(defaultVoice: String): AppSettings =
         settingsDao.get() ?: AppSettings(defaultVoice = defaultVoice).also { settingsDao.upsert(it) }
 
+    /** Null if the user has never opened AppSettingsScreen yet (no row written) — callers that
+     * only need a tuning knob with a sane fallback shouldn't have to supply a default voice just
+     * to get it. */
+    suspend fun getSettingsRaw(): AppSettings? = settingsDao.get()
+
     suspend fun updateSettings(settings: AppSettings) = settingsDao.upsert(settings)
 
     fun booksDir(folderId: String): File = File(context.filesDir, "books/$folderId")
@@ -117,7 +122,22 @@ class BookRepository(private val context: Context) {
     suspend fun getChapterOnce(chapterId: Long): Chapter? = chapterDao.get(chapterId)
     suspend fun getSentencesOnce(chapterId: Long): List<Sentence> = sentenceDao.getForChapter(chapterId)
 
-    suspend fun markGenerating(sentenceId: Long) = sentenceDao.updateAudio(sentenceId, AudioStatus.GENERATING, null, null)
+    /** Walks candidates in reading order and atomically claims the first one still available —
+     * safe to call concurrently from multiple generation workers on the same chapter, since
+     * [SentenceDao.tryClaim] only succeeds for whichever caller's UPDATE lands first. */
+    suspend fun claimNextSentence(chapterId: Long): Sentence? {
+        val candidates = sentenceDao.getForChapter(chapterId)
+            .filter { it.audioStatus == AudioStatus.NOT_GENERATED || it.audioStatus == AudioStatus.FAILED }
+        for (candidate in candidates) {
+            if (sentenceDao.tryClaim(candidate.id) == 1) return candidate.copy(audioStatus = AudioStatus.GENERATING)
+        }
+        return null
+    }
+
+    /** Distinguishes "chapter fully generated" from "every remaining sentence is already claimed
+     * by another worker" — [claimNextSentence] returning null means the latter too, not just the
+     * former, once more than one worker can be active on the same chapter. */
+    suspend fun countGenerating(chapterId: Long): Int = sentenceDao.countGenerating(chapterId)
 
     suspend fun markGenerated(chapterId: Long, sentenceId: Long, fileName: String, durationMs: Int) = withContext(Dispatchers.IO) {
         val chapter = chapterDao.get(chapterId) ?: return@withContext

@@ -5,11 +5,11 @@ object Routes {
     const val APP_SETTINGS = "app_settings"
     const val BOOK_DETAIL = "book/{bookId}"
     const val LISTEN = "listen/{bookId}/{chapterId}"
-    const val SPEECH_SETTINGS = "speech_settings/{bookId}"
+    const val BOOK_SETTINGS = "book_settings/{bookId}"
     const val BOOK_VOICE = "book_voice/{bookId}"
 
     fun bookDetail(bookId: Long) = "book/$bookId"
     fun listen(bookId: Long, chapterId: Long) = "listen/$bookId/$chapterId"
-    fun speechSettings(bookId: Long) = "speech_settings/$bookId"
+    fun bookSettings(bookId: Long) = "book_settings/$bookId"
     fun bookVoice(bookId: Long) = "book_voice/$bookId"
 }

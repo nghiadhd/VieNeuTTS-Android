@@ -44,7 +44,7 @@ private const val SUBTITLE_LINE_SPACING_STEPS = 9 // 1.0, 1.1, ..., 2.0 in steps
  * convenience instead of needing to go via BookDetailScreen.
  */
 @Composable
-fun SpeechSettingsScreen(bookId: Long, onBack: () -> Unit) {
+fun BookSettingsScreen(bookId: Long, onBack: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as ReaderApp
     val scope = rememberCoroutineScope()

@@ -13,12 +13,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.vieneu.reader.ui.AppSettingsScreen
 import com.vieneu.reader.ui.BookDetailScreen
+import com.vieneu.reader.ui.BookSettingsScreen
 import com.vieneu.reader.ui.BookVoiceScreen
 import com.vieneu.reader.ui.LibraryScreen
 import com.vieneu.reader.ui.ListenScreen
 import com.vieneu.reader.ui.ReaderTheme
 import com.vieneu.reader.ui.Routes
-import com.vieneu.reader.ui.SpeechSettingsScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -62,15 +62,15 @@ class MainActivity : ComponentActivity() {
                                 bookId = bookId,
                                 chapterId = chapterId,
                                 onBack = { navController.popBackStack() },
-                                onOpenSpeechSettings = { navController.navigate(Routes.speechSettings(bookId)) },
+                                onOpenBookSettings = { navController.navigate(Routes.bookSettings(bookId)) },
                             )
                         }
                         composable(
-                            Routes.SPEECH_SETTINGS,
+                            Routes.BOOK_SETTINGS,
                             arguments = listOf(navArgument("bookId") { type = NavType.LongType }),
                         ) { entry ->
                             val bookId = entry.arguments!!.getLong("bookId")
-                            SpeechSettingsScreen(bookId = bookId, onBack = { navController.popBackStack() })
+                            BookSettingsScreen(bookId = bookId, onBack = { navController.popBackStack() })
                         }
                         composable(
                             Routes.BOOK_VOICE,

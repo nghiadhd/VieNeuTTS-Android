@@ -103,51 +103,91 @@ class TtsEngine private constructor(
          * need real filesystem paths — mmap/external-data can't work
          * directly against an APK asset stream), then loads everything.
          */
-        fun create(context: Context): TtsEngine {
+        fun create(context: Context, intraOpThreads: Int = 2): TtsEngine =
+            createPool(context, workerCount = 1, intraOpThreadsPerWorker = intraOpThreads).single()
+
+        /**
+         * Creates [workerCount] independent engines that can each call synthesize() concurrently
+         * on their own thread — one sentence in flight per worker, which is a real wall-clock win
+         * since sentences are fully independent of each other (unlike the sequential decode loop
+         * *within* one sentence, which can't be parallelized this way). Read-only shared resources
+         * (config/tokenizer/embedding heads/voice presets, and the asset copy-out) are loaded once
+         * and reused by every worker; each still gets its own ONNX sessions and G2P instance,
+         * neither of which is documented as safe for concurrent calls from multiple threads.
+         */
+        fun createPool(context: Context, workerCount: Int, intraOpThreadsPerWorker: Int): List<TtsEngine> {
+            require(workerCount >= 1) { "workerCount must be >= 1, was $workerCount" }
             val dictFile = copyAssetOnce(context, DICT_ASSET, DICT_ASSET)
             for (rel in ONNX_MODEL_FILES) copyAssetOnce(context, rel, rel)
-
-            val g2p = SeaG2p(dictFile.absolutePath, "vi")
 
             val config = VieNeuConfig.fromJson(context.assets.open("$ONNX_DIR/config.json").bufferedReader().readText())
             val tokenizer = BpeTokenizer.fromJson(context.assets.open("$ONNX_DIR/tokenizer.json").bufferedReader().readText())
             val heads = context.assets.open("$ONNX_DIR/vieneu_v3_heads.npz").use { NpyReader.parseNpz(it) }
             val voices = loadVoices(context)
-
-            // A per-session thread pool (ORT's default) means each of our 4 sessions spins
-            // up its own worker threads; on a low-RAM device that's 4x the thread/arena
-            // overhead for no benefit, since we only ever run one session at a time. A
-            // shared global pool (env-level ThreadingOptions + disablePerSessionThreads()
-            // on each session below) cuts that down to one.
-            //
-            // A/B tested (direct listening comparison, raw synthesized PCM, engine-only —
-            // bypassing playback and compression entirely) against ORT's defaults after an
-            // audio-noise complaint: both produced identical, clean output. The complaint
-            // traced instead to the remote/forwarded emulator's own audio playback path, not
-            // this tuning — see ReaderPlayer for that investigation. Keeping this as-is.
-            val threadingOptions = OrtEnvironment.ThreadingOptions().apply {
-                setGlobalIntraOpNumThreads(2)
-                setGlobalInterOpNumThreads(1)
-                setGlobalSpinControl(false)
-            }
-            val env = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, OrtEnvironment.DEFAULT_NAME, threadingOptions)
+            val textEmb = heads.getValue("text_emb")
+            val audioEmb = heads.getValue("audio_emb")
             val modelsDir = File(context.filesDir, ONNX_DIR)
+            val codecDecodeFile = File(context.filesDir, "moss_audio_tokenizer_decode_full.onnx")
+
             // The default CPU arena allocator never shrinks — it keeps every high-water-mark
             // byte reserved for the session's lifetime instead of returning freed tensors to
             // the OS, so RSS only ratchets upward sentence after sentence. Plain malloc/free
             // per tensor is slightly slower per call but actually gives memory back between
             // synthesize() calls, which matters more than raw speed on a low-RAM device.
-            fun lowMemSessionOptions() = OrtSession.SessionOptions().apply {
-                disablePerSessionThreads()
-                setCPUArenaAllocator(false)
+            val env: OrtEnvironment
+            val sessionOptions: () -> OrtSession.SessionOptions
+            if (workerCount == 1) {
+                // A per-session thread pool (ORT's default) means each of our 4 sessions spins
+                // up its own worker threads; on a low-RAM device that's 4x the thread/arena
+                // overhead for no benefit, since a single engine only ever runs one of its own
+                // sessions at a time. A shared global pool (env-level ThreadingOptions +
+                // disablePerSessionThreads() on each session below) cuts that down to one.
+                //
+                // A/B tested (direct listening comparison, raw synthesized PCM, engine-only —
+                // bypassing playback and compression entirely) against ORT's defaults after an
+                // audio-noise complaint: both produced identical, clean output. The complaint
+                // traced instead to the remote/forwarded emulator's own audio playback path, not
+                // this tuning — see ReaderPlayer for that investigation.
+                val threadingOptions = OrtEnvironment.ThreadingOptions().apply {
+                    setGlobalIntraOpNumThreads(intraOpThreadsPerWorker.coerceAtLeast(1))
+                    setGlobalInterOpNumThreads(1)
+                    setGlobalSpinControl(false)
+                }
+                env = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, OrtEnvironment.DEFAULT_NAME, threadingOptions)
+                sessionOptions = {
+                    OrtSession.SessionOptions().apply {
+                        disablePerSessionThreads()
+                        setCPUArenaAllocator(false)
+                    }
+                }
+            } else {
+                // Multiple workers call synthesize() concurrently from different threads — if
+                // they all shared one global pool (the single-worker path above), their Run()
+                // calls would serialize behind it, defeating the entire point of running them in
+                // parallel. Each worker's sessions get their own dedicated pool instead, sized so
+                // total CPU usage across all workers stays roughly workerCount * threadsPerWorker.
+                // OrtEnvironment itself is a process-wide singleton (the "env" argument to
+                // getEnvironment only configures it on the very first call in the process), so
+                // per-worker isolation has to happen at the SessionOptions level, not the env.
+                env = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING)
+                sessionOptions = {
+                    OrtSession.SessionOptions().apply {
+                        setIntraOpNumThreads(intraOpThreadsPerWorker.coerceAtLeast(1))
+                        setInterOpNumThreads(1)
+                        setCPUArenaAllocator(false)
+                    }
+                }
             }
-            val sessPrefill = env.createSession(File(modelsDir, "vieneu_prefill.onnx").path, lowMemSessionOptions())
-            val sessDecodeStep = env.createSession(File(modelsDir, "vieneu_decode_step.onnx").path, lowMemSessionOptions())
-            val sessAcoustic = env.createSession(File(modelsDir, "vieneu_acoustic_cached.onnx").path, lowMemSessionOptions())
-            val sessCodecDecode = env.createSession(File(context.filesDir, "moss_audio_tokenizer_decode_full.onnx").path, lowMemSessionOptions())
-            val onnx = VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, sessCodecDecode, heads.getValue("text_emb"), heads.getValue("audio_emb"), config)
 
-            return TtsEngine(g2p, onnx, config, tokenizer, heads, voices)
+            return List(workerCount) {
+                val g2p = SeaG2p(dictFile.absolutePath, "vi")
+                val sessPrefill = env.createSession(File(modelsDir, "vieneu_prefill.onnx").path, sessionOptions())
+                val sessDecodeStep = env.createSession(File(modelsDir, "vieneu_decode_step.onnx").path, sessionOptions())
+                val sessAcoustic = env.createSession(File(modelsDir, "vieneu_acoustic_cached.onnx").path, sessionOptions())
+                val sessCodecDecode = env.createSession(codecDecodeFile.path, sessionOptions())
+                val onnx = VieNeuOnnxEngine(env, sessPrefill, sessDecodeStep, sessAcoustic, sessCodecDecode, textEmb, audioEmb, config)
+                TtsEngine(g2p, onnx, config, tokenizer, heads, voices)
+            }
         }
 
         private fun loadVoices(context: Context): Map<String, Voice> {

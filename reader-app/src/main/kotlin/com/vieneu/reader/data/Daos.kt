@@ -85,8 +85,19 @@ interface SentenceDao {
     @Query("UPDATE sentences SET audioStatus = :status, audioFilePath = :path, durationMs = :durationMs WHERE id = :id")
     suspend fun updateAudio(id: Long, status: AudioStatus, path: String?, durationMs: Int?)
 
+    /** Atomic claim for concurrent generation workers: flips one sentence to GENERATING only if
+     * it's still NOT_GENERATED/FAILED, returning the number of rows actually changed (0 or 1).
+     * SQLite serializes writes, so when two workers race for the same id only one ever sees a
+     * return value of 1 — that's what lets multiple workers safely pull from the same chapter's
+     * sentence list without both generating the same sentence. */
+    @Query("UPDATE sentences SET audioStatus = 'GENERATING' WHERE id = :id AND audioStatus IN ('NOT_GENERATED', 'FAILED')")
+    suspend fun tryClaim(id: Long): Int
+
     @Query("SELECT COUNT(*) FROM sentences WHERE chapterId = :chapterId AND audioStatus = 'GENERATED'")
     suspend fun countGenerated(chapterId: Long): Int
+
+    @Query("SELECT COUNT(*) FROM sentences WHERE chapterId = :chapterId AND audioStatus = 'GENERATING'")
+    suspend fun countGenerating(chapterId: Long): Int
 
     @Query("UPDATE sentences SET audioStatus = 'NOT_GENERATED', audioFilePath = NULL, durationMs = NULL WHERE chapterId IN (SELECT id FROM chapters WHERE bookId = :bookId)")
     suspend fun resetAllForBook(bookId: Long)

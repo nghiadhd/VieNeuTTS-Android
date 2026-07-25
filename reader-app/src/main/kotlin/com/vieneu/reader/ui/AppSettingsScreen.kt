@@ -45,6 +45,10 @@ private const val SUBTITLE_FONT_SCALE_STEPS = 12 // 0.7, 0.8, ..., 2.0 in steps 
 private const val SUBTITLE_LINE_SPACING_MIN = 1.0f
 private const val SUBTITLE_LINE_SPACING_MAX = 2.0f
 private const val SUBTITLE_LINE_SPACING_STEPS = 9 // 1.0, 1.1, ..., 2.0 in steps of 0.1
+private const val PREGENERATE_CHAPTERS_MIN = 1f
+private const val PREGENERATE_CHAPTERS_MAX = 5f
+private const val PARALLEL_WORKERS_MIN = 1f
+private const val PARALLEL_WORKERS_MAX = 4f // must match TtsGenerationService.MAX_WORKERS
 
 @Composable
 fun AppSettingsScreen(onBack: () -> Unit) {
@@ -89,6 +93,51 @@ fun AppSettingsScreen(onBack: () -> Unit) {
                     onCheckedChange = { enabled -> update { it.copy(autoRetentionEnabled = enabled) } },
                 )
             }
+
+            Text(
+                "Hiệu năng tạo giọng đọc",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 16.dp),
+            )
+            val maxThreads = remember { Runtime.getRuntime().availableProcessors().coerceIn(1, 8) }
+            Text(
+                "Số luồng CPU: ${settings?.ttsThreadCount ?: 2} / $maxThreads (áp dụng sau khi khởi động lại app)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            )
+            Slider(
+                value = (settings?.ttsThreadCount ?: 2).toFloat(),
+                onValueChange = { update { s -> s.copy(ttsThreadCount = it.toInt()) } },
+                valueRange = 1f..maxThreads.toFloat(),
+                steps = (maxThreads - 2).coerceAtLeast(0),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
+            Text(
+                "Tạo trước: ${settings?.pregenerateChaptersAhead ?: 1} chương",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            )
+            Slider(
+                value = (settings?.pregenerateChaptersAhead ?: 1).toFloat(),
+                onValueChange = { update { s -> s.copy(pregenerateChaptersAhead = it.toInt()) } },
+                valueRange = PREGENERATE_CHAPTERS_MIN..PREGENERATE_CHAPTERS_MAX,
+                steps = (PREGENERATE_CHAPTERS_MAX - PREGENERATE_CHAPTERS_MIN - 1).toInt(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
+            Text(
+                "Số câu tạo song song: ${settings?.parallelGenerationWorkers ?: 1} " +
+                    "(mỗi luồng dùng thêm bộ nhớ và CPU riêng — tăng dần và theo dõi độ ổn định; " +
+                    "áp dụng sau khi khởi động lại app)",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+            )
+            Slider(
+                value = (settings?.parallelGenerationWorkers ?: 1).toFloat(),
+                onValueChange = { update { s -> s.copy(parallelGenerationWorkers = it.toInt()) } },
+                valueRange = PARALLEL_WORKERS_MIN..PARALLEL_WORKERS_MAX,
+                steps = (PARALLEL_WORKERS_MAX - PARALLEL_WORKERS_MIN - 1).toInt(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
 
             Text(
                 "Cỡ chữ khi nghe: ${"%.2f".format(settings?.subtitleFontScale ?: 1.0f)}x",

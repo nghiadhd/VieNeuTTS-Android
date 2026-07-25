@@ -79,4 +79,17 @@ data class AppSettings(
     val subtitleFontScale: Float = 1.0f,
     /** Multiplier on the base subtitle line height in ListenScreen (1.0 = normal). */
     val subtitleLineSpacing: Float = 1.0f,
+    /** ORT intra-op thread count for TTS inference. Higher can mean faster generation on
+     * multi-core devices, at the cost of more CPU/battery use. ONNX Runtime's environment is a
+     * process-wide singleton, so this only takes effect after the app is fully restarted, not
+     * just when a new chapter starts generating. */
+    val ttsThreadCount: Int = 2,
+    /** How many chapters past the one currently open get queued for background (low-priority)
+     * generation, so more of a book is ready before the reader gets there. */
+    val pregenerateChaptersAhead: Int = 1,
+    /** Number of sentences generated concurrently, each on its own thread with its own TtsEngine
+     * instance. Real wall-clock speedup on multi-core devices since sentences are independent of
+     * each other, at the cost of one extra ONNX-session set (RAM) and one extra CPU-bound thread
+     * per additional worker. Applied on the next TtsGenerationService (re)start. */
+    val parallelGenerationWorkers: Int = 1,
 )
