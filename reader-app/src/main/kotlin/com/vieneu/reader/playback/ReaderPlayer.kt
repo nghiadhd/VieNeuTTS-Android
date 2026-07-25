@@ -23,12 +23,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Sequential, sentence-by-sentence player enforcing the streaming
- * buffer-ahead gate (design spec §4, [BufferGate]) and applying
- * speed/pitch via [AudioTrack.setPlaybackParams] — a generation-time
- * regeneration is never needed for either of those, they're playback-time
- * only. MVP playback granularity is per-sentence (pause/resume restarts the
- * current sentence rather than resuming mid-sentence — a "refine later").
+ * Sequential, sentence-by-sentence player. No buffer-ahead gate: if the current sentence isn't
+ * generated yet, playback just stops (Status.WAITING_FOR_BUFFER) rather than polling and
+ * auto-resuming — the user presses play again once it's ready. Applies speed/pitch via
+ * [AudioTrack.setPlaybackParams] — a generation-time regeneration is never needed for either of
+ * those, they're playback-time only. MVP playback granularity is per-sentence (pause/resume
+ * restarts the current sentence rather than resuming mid-sentence — a "refine later").
  */
 class ReaderPlayer(private val repo: BookRepository, private val scope: CoroutineScope) {
     enum class Status { IDLE, PLAYING, PAUSED, WAITING_FOR_BUFFER }
@@ -146,10 +146,6 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
 
     private suspend fun playLoop(chapter: Chapter, startIndex: Int) {
         var index = startIndex
-        // Only the very first sentence of this playback session needs the full cold-start
-        // buffer — once we're warmed up, a momentary catch-up only needs 1 sentence ahead to
-        // resume, not a full buffer rebuild (see BufferGate's doc comment).
-        var warmedUp = false
         while (scope.isActive) {
             val sentences = repo.getSentencesOnce(chapter.id)
             if (index >= sentences.size) {
@@ -158,18 +154,13 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
                 return
             }
 
-            val allGenerated = sentences.all { it.audioStatus == AudioStatus.GENERATED }
-            val lastGeneratedIndex = sentences.indexOfLast { it.audioStatus == AudioStatus.GENERATED }
-            if (!allGenerated && !BufferGate.mayPlay(sentences.size, index, lastGeneratedIndex, warmedUp)) {
-                _state.update { it.copy(sentenceIndex = index, status = Status.WAITING_FOR_BUFFER) }
-                delay(400)
-                continue
-            }
-
             val sentence = sentences[index]
             if (sentence.audioStatus != AudioStatus.GENERATED || sentence.audioFilePath == null) {
-                delay(400) // generated out of order / retry pending — wait for it specifically
-                continue
+                // No buffer-ahead wait/auto-resume — stop here and require an explicit resume()
+                // (the user tapping play again) once generation has actually caught up, instead
+                // of silently polling and auto-continuing.
+                _state.update { it.copy(sentenceIndex = index, status = Status.WAITING_FOR_BUFFER) }
+                return
             }
 
             val pcmData = decodeOrTakePrefetch(sentence.id, File(sentence.audioFilePath))
@@ -192,7 +183,6 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
                 else -> 40L
             }
             delay(pauseMs)
-            warmedUp = true
             index++
         }
     }
