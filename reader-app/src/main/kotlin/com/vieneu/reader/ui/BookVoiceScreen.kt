@@ -126,7 +126,10 @@ fun BookVoiceScreen(bookId: Long, onBack: () -> Unit) {
                         leadingContent = {
                             RadioButton(
                                 selected = book?.voiceOverride == null,
-                                onClick = { scope.launch { app.repository.setVoiceOverride(bookId, null) } },
+                                // On the app-lifetime scope, not this screen's — setVoiceOverride
+                                // loops file deletion across every chapter of the book, easily
+                                // outlived by the user tapping back right after picking a voice.
+                                onClick = { app.applicationScope.launch { app.repository.setVoiceOverride(bookId, null) } },
                             )
                         },
                     )
@@ -137,7 +140,7 @@ fun BookVoiceScreen(bookId: Long, onBack: () -> Unit) {
                         leadingContent = {
                             RadioButton(
                                 selected = book?.voiceOverride == voice,
-                                onClick = { scope.launch { app.repository.setVoiceOverride(bookId, voice) } },
+                                onClick = { app.applicationScope.launch { app.repository.setVoiceOverride(bookId, voice) } },
                             )
                         },
                     )

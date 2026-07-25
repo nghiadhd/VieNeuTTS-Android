@@ -14,7 +14,13 @@ class ReaderApp : Application() {
     lateinit var player: ReaderPlayer
         private set
 
-    private val appScope = CoroutineScope(SupervisorJob())
+    /** Process-lifetime scope for repository operations that must run to completion
+     * regardless of which screen is on top — a `rememberCoroutineScope()` in a Composable
+     * gets cancelled the moment the user navigates away, which is wrong for something like
+     * [BookRepository.setVoiceOverride] (loops file deletion across every chapter of the
+     * book — a multi-second operation on a book with dozens of chapters, easily outlived by
+     * a quick back-navigation). */
+    val applicationScope = CoroutineScope(SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -22,7 +28,7 @@ class ReaderApp : Application() {
         // Reconstructs Book/Chapter/Sentence rows from per-chapter recovery JSON for any
         // book folder Room doesn't know about yet (DB wipe, reinstall, destructive
         // migration) — must run before anything else reads/writes through repository.
-        appScope.launch { repository.runStartupRecovery() }
-        player = ReaderPlayer(repository, appScope)
+        applicationScope.launch { repository.runStartupRecovery() }
+        player = ReaderPlayer(repository, applicationScope)
     }
 }
