@@ -105,7 +105,18 @@ interface SentenceDao {
     /** A sentence stuck at GENERATING means the process died mid-synthesize() — retry it. */
     @Query("UPDATE sentences SET audioStatus = 'NOT_GENERATED' WHERE audioStatus = 'GENERATING'")
     suspend fun resetStaleGenerating()
+
+    /** One aggregate query for the whole chapter list, not one per row — avoids the N+1 this
+     * session already hit once with per-chapter generation-count queries. */
+    @Query(
+        "SELECT chapterId, COUNT(*) as count FROM sentences " +
+            "WHERE chapterId IN (SELECT id FROM chapters WHERE bookId = :bookId) AND audioStatus = 'GENERATED' " +
+            "GROUP BY chapterId",
+    )
+    fun observeGeneratedCountsForBook(bookId: Long): Flow<List<ChapterGeneratedCount>>
 }
+
+data class ChapterGeneratedCount(val chapterId: Long, val count: Int)
 
 @Dao
 interface AppSettingsDao {

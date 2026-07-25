@@ -14,6 +14,7 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -47,6 +48,10 @@ class BookRepository(private val context: Context) {
     fun observeChapters(bookId: Long): Flow<List<Chapter>> = chapterDao.observeForBook(bookId)
     fun observeSentences(chapterId: Long): Flow<List<Sentence>> = sentenceDao.observeForChapter(chapterId)
     fun observeSettings(): Flow<AppSettings?> = settingsDao.observe()
+
+    /** chapterId -> generated-sentence count, for the chapter list's per-chapter generation status. */
+    fun observeGeneratedCounts(bookId: Long): Flow<Map<Long, Int>> =
+        sentenceDao.observeGeneratedCountsForBook(bookId).map { rows -> rows.associate { it.chapterId to it.count } }
 
     suspend fun getSettingsOrDefault(defaultVoice: String): AppSettings =
         settingsDao.get() ?: AppSettings(defaultVoice = defaultVoice).also { settingsDao.upsert(it) }

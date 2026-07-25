@@ -3,14 +3,18 @@
 package com.vieneu.reader.ui
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -19,7 +23,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -142,6 +145,30 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
                 },
                 valueRange = 0f..(total - 1).coerceAtLeast(0).toFloat(),
                 enabled = total > 0 && lastGeneratedIndex >= 0,
+                // Three layers instead of the stock two-tone track, so the bar itself shows
+                // generation racing ahead of (or falling behind) playback, replacing the
+                // separate "Đang tạo thêm giọng đọc…" spinner/label that used to appear below:
+                // background = not generated yet, middle = generated but not played yet
+                // (the actual look-ahead buffer), foreground = already played.
+                track = {
+                    val maxIndex = (total - 1).coerceAtLeast(1)
+                    val playedFraction = (displayedIndex.toFloat() / maxIndex).coerceIn(0f, 1f)
+                    val generatedFraction = (seekableMax.toFloat() / maxIndex).coerceIn(0f, 1f)
+                    Box(Modifier.fillMaxWidth().height(4.dp)) {
+                        Box(
+                            Modifier.fillMaxSize()
+                                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(2.dp)),
+                        )
+                        Box(
+                            Modifier.fillMaxWidth(generatedFraction).fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(2.dp)),
+                        )
+                        Box(
+                            Modifier.fillMaxWidth(playedFraction).fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp)),
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             )
             Text(
@@ -149,13 +176,6 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenSpeech
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.secondary,
             )
-
-            if (playerState.status == ReaderPlayer.Status.WAITING_FOR_BUFFER) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
-                    Text("Đang tạo thêm giọng đọc…")
-                }
-            }
 
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 24.dp),

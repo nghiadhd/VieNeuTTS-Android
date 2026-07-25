@@ -45,6 +45,7 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
     val scope = rememberCoroutineScope()
     val book by app.repository.observeBook(bookId).collectAsState(initial = null)
     val chapters by app.repository.observeChapters(bookId).collectAsState(initial = emptyList())
+    val generatedCounts by app.repository.observeGeneratedCounts(bookId).collectAsState(initial = emptyMap())
     var progress by remember { mutableStateOf(0 to 0) }
 
     LaunchedEffect(bookId, chapters) {
@@ -78,9 +79,23 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
             Text("Chương", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 12.dp, bottom = 4.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 items(chapters, key = { it.id }) { chapter ->
+                    // Mirrors wholeBookListenProgress's own logic, per chapter: fully heard if
+                    // the cursor has moved past it, partially heard (by sentence) if it's the
+                    // current chapter, untouched otherwise.
+                    val b = book
+                    val listenPercent = when {
+                        b == null || chapter.sentenceCount == 0 -> 0
+                        chapter.orderIndex < b.lastChapterIndex -> 100
+                        chapter.orderIndex == b.lastChapterIndex ->
+                            (b.lastSentenceIndex.coerceAtMost(chapter.sentenceCount) * 100) / chapter.sentenceCount
+                        else -> 0
+                    }
+                    val generatedCount = generatedCounts[chapter.id] ?: 0
                     ChapterRow(
                         chapter,
                         isCurrent = chapter.orderIndex == book?.lastChapterIndex,
+                        listenPercent = listenPercent,
+                        generatedCount = generatedCount,
                         onClick = { onOpenChapter(chapter.id) },
                         onDeleteAudio = {
                             scope.launch {
@@ -96,12 +111,32 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
 }
 
 @Composable
-private fun ChapterRow(chapter: Chapter, isCurrent: Boolean, onClick: () -> Unit, onDeleteAudio: () -> Unit) {
+private fun ChapterRow(
+    chapter: Chapter,
+    isCurrent: Boolean,
+    listenPercent: Int,
+    generatedCount: Int,
+    onClick: () -> Unit,
+    onDeleteAudio: () -> Unit,
+) {
     var confirmDelete by remember { mutableStateOf(false) }
+    val genStatus = when {
+        chapter.sentenceCount == 0 -> "—"
+        generatedCount >= chapter.sentenceCount -> "Đã tạo xong"
+        generatedCount == 0 -> "Chưa tạo giọng"
+        else -> "Đang tạo ${(generatedCount * 100) / chapter.sentenceCount}%"
+    }
 
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
         Row(modifier = Modifier.padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(chapter.title, modifier = Modifier.fillMaxWidth().weight(1f))
+            Column(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                Text(chapter.title)
+                Text(
+                    "Đã nghe: $listenPercent% · $genStatus",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
             if (isCurrent) Text("●", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
             IconButton(onClick = { confirmDelete = true }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Xóa giọng đọc đã tạo cho chương này")
