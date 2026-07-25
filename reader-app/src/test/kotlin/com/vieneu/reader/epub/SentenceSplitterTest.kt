@@ -4,6 +4,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import org.junit.Test
 
+private fun List<SentenceSplitter.Chunk>.texts() = map { it.text }
+
 class SentenceSplitterTest {
     @Test
     fun mergesAdjacentShortSentencesForRicherTtsContext() {
@@ -13,7 +15,7 @@ class SentenceSplitterTest {
         val text = "Trong màn mưa mùa hạ rền vang sấm sét. Một chiếc Porche màu đen chạy trên đường."
         assertEquals(
             listOf("Trong màn mưa mùa hạ rền vang sấm sét. Một chiếc Porche màu đen chạy trên đường."),
-            SentenceSplitter.split(text),
+            SentenceSplitter.split(text).texts(),
         )
     }
 
@@ -22,7 +24,7 @@ class SentenceSplitterTest {
         val text = "Vậy tương lai của tôi ở đâu? Nhà tù. Nói nhăng nói cuội cái gì đó!"
         assertEquals(
             listOf("Vậy tương lai của tôi ở đâu? Nhà tù. Nói nhăng nói cuội cái gì đó!"),
-            SentenceSplitter.split(text),
+            SentenceSplitter.split(text).texts(),
         )
     }
 
@@ -31,7 +33,7 @@ class SentenceSplitterTest {
         val text = "Giá SP500 hôm nay là 4.200,5 điểm. Tăng nhẹ so với hôm qua."
         assertEquals(
             listOf("Giá SP500 hôm nay là 4.200,5 điểm. Tăng nhẹ so với hôm qua."),
-            SentenceSplitter.split(text),
+            SentenceSplitter.split(text).texts(),
         )
     }
 
@@ -40,17 +42,29 @@ class SentenceSplitterTest {
         val text = "Cô ấy dừng lại một chút… Rồi tiếp tục nói."
         assertEquals(
             listOf("Cô ấy dừng lại một chút… Rồi tiếp tục nói."),
-            SentenceSplitter.split(text),
+            SentenceSplitter.split(text).texts(),
         )
     }
 
     @Test
     fun mergesWithinAParagraphButNeverAcrossAParagraphBreak() {
         val text = "Đoạn một.\n\nĐoạn hai có hai câu. Câu thứ hai."
-        assertEquals(
-            listOf("Đoạn một.", "Đoạn hai có hai câu. Câu thứ hai."),
-            SentenceSplitter.split(text),
-        )
+        val result = SentenceSplitter.split(text)
+        assertEquals(listOf("Đoạn một.", "Đoạn hai có hai câu. Câu thứ hai."), result.texts())
+        // Both are the last (only) chunk of their own paragraph.
+        assertTrue(result.all { it.isParagraphEnd })
+    }
+
+    @Test
+    fun onlyTheLastChunkOfAParagraphIsMarkedAsParagraphEnd() {
+        // One paragraph forced into multiple merged chunks (many short sentences) — only the
+        // final chunk should carry isParagraphEnd, so playback gives a long pause once per
+        // paragraph, not once per chunk.
+        val text = (1..40).joinToString(" ") { "Câu ngắn số $it." }
+        val result = SentenceSplitter.split(text)
+        assertTrue(result.size > 1)
+        assertTrue(result.dropLast(1).none { it.isParagraphEnd }, "only the last chunk should be isParagraphEnd")
+        assertTrue(result.last().isParagraphEnd)
     }
 
     @Test
@@ -68,7 +82,7 @@ class SentenceSplitterTest {
         val clause = "một câu rất dài không có dấu chấm câu nào cả nó cứ kéo dài mãi"
         val text = (1..8).joinToString(", ") { clause } + "."
 
-        val result = SentenceSplitter.split(text)
+        val result = SentenceSplitter.split(text).texts()
 
         assertTrue(result.size > 1, "expected the run-on sentence to be split into multiple chunks")
         result.forEach { assertTrue(it.length <= 256, "chunk exceeds cap: '$it' (${it.length} chars)") }
@@ -80,7 +94,7 @@ class SentenceSplitterTest {
     @Test
     fun capsRunOnSentenceWithNoPunctuationAtAllByWords() {
         val text = "tu " + "chu ".repeat(150) + "cuoi" // no punctuation whatsoever, ~750 chars
-        val result = SentenceSplitter.split(text)
+        val result = SentenceSplitter.split(text).texts()
 
         assertTrue(result.size > 1, "expected the word-salad sentence to be split into multiple chunks")
         result.forEach { assertTrue(it.length <= 256, "chunk exceeds cap: '$it' (${it.length} chars)") }
@@ -89,7 +103,7 @@ class SentenceSplitterTest {
     @Test
     fun leavesShortSentencesUntouched() {
         val text = "Câu ngắn thôi."
-        assertEquals(listOf("Câu ngắn thôi."), SentenceSplitter.split(text))
+        assertEquals(listOf("Câu ngắn thôi."), SentenceSplitter.split(text).texts())
     }
 
     @Test
@@ -97,7 +111,7 @@ class SentenceSplitterTest {
         // Many short sentences in one paragraph — merged for context, but never into a single
         // chunk bigger than the model's own max_chars, and no words dropped or duplicated.
         val text = (1..40).joinToString(" ") { "Câu ngắn số $it." }
-        val result = SentenceSplitter.split(text)
+        val result = SentenceSplitter.split(text).texts()
 
         assertTrue(result.size > 1, "expected merging to still produce multiple chunks, not one giant blob")
         result.forEach { assertTrue(it.length <= 256, "merged chunk exceeds cap: '$it' (${it.length} chars)") }

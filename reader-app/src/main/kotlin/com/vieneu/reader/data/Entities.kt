@@ -54,6 +54,10 @@ data class Sentence(
     val chapterId: Long,
     val orderIndex: Int,
     val text: String,
+    /** True if this is the last chunk of its source paragraph — the only pacing info that's
+     * lost once text is flattened into rows (sentence- vs minor-boundary pacing is derivable
+     * at playback time from this chunk's own trailing punctuation). See ReaderPlayer. */
+    val isParagraphEnd: Boolean = false,
     val audioStatus: AudioStatus = AudioStatus.NOT_GENERATED,
     val audioFilePath: String? = null,
     val durationMs: Int? = null,

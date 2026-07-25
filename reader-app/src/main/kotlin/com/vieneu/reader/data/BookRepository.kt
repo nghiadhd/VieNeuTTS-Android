@@ -93,7 +93,9 @@ class BookRepository(private val context: Context) {
         for ((i, chapter) in parsed.chapters.withIndex()) {
             val sentences = SentenceSplitter.split(chapter.plainText)
             sentenceDao.insertAll(
-                sentences.mapIndexed { j, text -> Sentence(chapterId = chapterIds[i], orderIndex = j, text = text) },
+                sentences.mapIndexed { j, chunk ->
+                    Sentence(chapterId = chapterIds[i], orderIndex = j, text = chunk.text, isParagraphEnd = chunk.isParagraphEnd)
+                },
             )
             val chapterRow = chapterDao.get(chapterIds[i]) ?: continue
             syncChapterMetadata(folderId, chapterRow, sentenceDao.getForChapter(chapterIds[i]))

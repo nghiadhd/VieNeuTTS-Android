@@ -29,6 +29,6 @@ class EpubParserTest {
         // Both short sentences are in the same paragraph and well under the merge cap, so they
         // become a single chunk — see SentenceSplitter's doc comment for why.
         assertEquals(1, sentences.size)
-        assertEquals("Day la cau dau tien cua chuong mot. Day la cau thu hai.", sentences[0])
+        assertEquals("Day la cau dau tien cua chuong mot. Day la cau thu hai.", sentences[0].text)
     }
 }

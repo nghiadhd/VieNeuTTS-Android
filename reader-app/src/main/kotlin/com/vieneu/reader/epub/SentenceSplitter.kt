@@ -33,14 +33,19 @@ object SentenceSplitter {
     private const val MAX_CHARS = 256
     private val MINOR_PUNCT_BOUNDARY = Regex("(?<=[,;:\\-–—])\\s+")
 
-    fun split(text: String): List<String> {
+    /** [isParagraphEnd]: last chunk of its source paragraph — used for pacing at playback time
+     * (a paragraph break gets a longer pause than a plain sentence end); see ReaderPlayer. */
+    data class Chunk(val text: String, val isParagraphEnd: Boolean)
+
+    fun split(text: String): List<Chunk> {
         val paragraphs = text.split(Regex("\\r?\\n+")).map { it.trim() }.filter { it.isNotEmpty() }
-        val sentences = mutableListOf<String>()
+        val result = mutableListOf<Chunk>()
         for (paragraph in paragraphs) {
             val capped = splitParagraph(paragraph).flatMap { capLength(it) }
-            sentences.addAll(mergeAdjacent(capped))
+            val merged = mergeAdjacent(capped)
+            merged.forEachIndexed { i, s -> result.add(Chunk(s, isParagraphEnd = i == merged.lastIndex)) }
         }
-        return sentences
+        return result
     }
 
     /** See the class doc comment for why adjacent sentences are merged back together. */

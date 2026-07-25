@@ -182,6 +182,16 @@ class ReaderPlayer(private val repo: BookRepository, private val scope: Coroutin
             _state.update { it.copy(sentenceIndex = index, status = Status.PLAYING) }
             repo.updatePosition(chapter.bookId, chapter.orderIndex, index)
             playAacFile(pcmData, _state.value.speed, _state.value.pitch)
+            // Back-to-back playback with zero gap reads as unnaturally clipped — VieNeu-TTS's
+            // own Python reference inserts a pause here too, sized by boundary type (see
+            // core_utils.py's V3_GAP_SILENCE): a paragraph break gets a longer breath than a
+            // plain sentence end, which in turn gets more than a forced mid-sentence split.
+            val pauseMs = when {
+                sentence.isParagraphEnd -> 350L
+                sentence.text.trim().lastOrNull() in listOf('.', '!', '?', '…') -> 180L
+                else -> 40L
+            }
+            delay(pauseMs)
             warmedUp = true
             index++
         }
