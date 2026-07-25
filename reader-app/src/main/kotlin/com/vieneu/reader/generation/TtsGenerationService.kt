@@ -22,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -65,6 +66,10 @@ class TtsGenerationService : Service() {
         repo = BookRepository(applicationContext)
         createNotificationChannel()
         scope.launch {
+            combine(highPriorityChapterId, lowPriorityQueue) { high, low -> high to low }
+                .collect { (high, low) -> GenerationStatus.update(high, low) }
+        }
+        scope.launch {
             // A sentence stuck at GENERATING means the process died mid-synthesize() last
             // time — reset it before workers start claiming sentences, or it'd be permanently
             // skipped (claimNextSentence only ever selects NOT_GENERATED/FAILED).
@@ -83,11 +88,13 @@ class TtsGenerationService : Service() {
                 highPriorityChapterId.value = intent.getLongExtra(EXTRA_CHAPTER_ID, -1).takeIf { it >= 0 }
                 startForeground(NOTIFICATION_ID, buildNotification("Đang tạo giọng đọc…"))
             }
-            ACTION_GENERATE_LOW_PRIORITY -> {
-                val chapterId = intent.getLongExtra(EXTRA_CHAPTER_ID, -1).takeIf { it >= 0 }
-                if (chapterId != null) {
-                    lowPriorityQueue.update { queue -> if (chapterId in queue) queue else queue + chapterId }
-                }
+            ACTION_SET_LOW_PRIORITY_CHAPTERS -> {
+                // A full replace, not an append: ListenScreen calls this every time the reader
+                // opens a new chapter, passing exactly the chapters it wants pre-generated from
+                // *this* position. Appending instead would leave every chapter ever visited
+                // stuck in the queue forever, silently competing with whatever the reader
+                // actually wants prioritized right now.
+                lowPriorityQueue.value = intent.getLongArrayExtra(EXTRA_CHAPTER_IDS)?.toList() ?: emptyList()
                 startForeground(NOTIFICATION_ID, buildNotification("Đang tạo giọng đọc…"))
             }
             ACTION_STOP_CHAPTER -> {
@@ -154,6 +161,13 @@ class TtsGenerationService : Service() {
 
         try {
             val voice = book.voiceOverride ?: repo.getSettingsOrDefault(engine.listVoices().first()).defaultVoice
+            // Temporary diagnostic for a reported "always uses default voice" bug — grep logcat
+            // for VoiceDebug. Remove once root-caused.
+            Log.i(
+                "VoiceDebug",
+                "generateOne bookId=$bookId chapterId=$chapterId sentenceId=${sentence.id} " +
+                    "book.voiceOverride=${book.voiceOverride} resolvedVoice=$voice",
+            )
             val audio = engine.synthesize(sentence.text, voice)
             // synthesize() is a real 7-15s CPU-bound call — if the book's voice override
             // changed while it was running, repo.setVoiceOverride already reset this sentence
@@ -209,10 +223,11 @@ class TtsGenerationService : Service() {
 
     companion object {
         const val ACTION_GENERATE_HIGH_PRIORITY = "com.vieneu.reader.GENERATE_HIGH"
-        const val ACTION_GENERATE_LOW_PRIORITY = "com.vieneu.reader.GENERATE_LOW"
+        const val ACTION_SET_LOW_PRIORITY_CHAPTERS = "com.vieneu.reader.SET_LOW_PRIORITY_CHAPTERS"
         const val ACTION_STOP_CHAPTER = "com.vieneu.reader.STOP_CHAPTER"
         const val ACTION_STOP_ALL = "com.vieneu.reader.STOP_ALL"
         const val EXTRA_CHAPTER_ID = "chapterId"
+        const val EXTRA_CHAPTER_IDS = "chapterIds"
         // Hard ceiling regardless of AppSettings.parallelGenerationWorkers, matching the slider's
         // max in AppSettingsScreen — bounds worst-case memory/thread usage.
         const val MAX_WORKERS = 4

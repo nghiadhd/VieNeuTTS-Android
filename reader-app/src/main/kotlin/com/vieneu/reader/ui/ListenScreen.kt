@@ -59,25 +59,27 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenBookSe
     val subtitleFontScale = book?.subtitleFontScaleOverride ?: settings?.subtitleFontScale ?: 1.0f
     val subtitleLineSpacing = book?.subtitleLineSpacingOverride ?: settings?.subtitleLineSpacing ?: 1.0f
 
-    // Start high-priority generation for this chapter, and queue the next N chapters
-    // (AppSettings.pregenerateChaptersAhead) in the background (low priority) — design spec
-    // §2/§4, N configurable in AppSettingsScreen's Performance section.
-    LaunchedEffect(chapterId, settings?.pregenerateChaptersAhead) {
+    // Start high-priority generation for this chapter, and replace the whole background
+    // (low-priority) queue with the next N chapters from *this* position (AppSettings.
+    // pregenerateChaptersAhead, configurable in AppSettingsScreen's Performance section) —
+    // design spec §2/§4. A replace, not an append: otherwise every chapter ever opened during a
+    // reading session stays queued forever, competing with wherever the reader actually is now.
+    LaunchedEffect(chapterId, chapter, settings?.pregenerateChaptersAhead) {
+        val c = chapter ?: return@LaunchedEffect // chapters Flow hasn't loaded yet; wait for it
         context.startService(
             Intent(context, TtsGenerationService::class.java)
                 .setAction(TtsGenerationService.ACTION_GENERATE_HIGH_PRIORITY)
                 .putExtra(TtsGenerationService.EXTRA_CHAPTER_ID, chapterId),
         )
         val aheadCount = settings?.pregenerateChaptersAhead ?: 1
-        val currentOrderIndex = chapter?.orderIndex ?: -1
-        for (offset in 1..aheadCount) {
-            val nextChapter = chapters.getOrNull(currentOrderIndex + offset) ?: break
-            context.startService(
-                Intent(context, TtsGenerationService::class.java)
-                    .setAction(TtsGenerationService.ACTION_GENERATE_LOW_PRIORITY)
-                    .putExtra(TtsGenerationService.EXTRA_CHAPTER_ID, nextChapter.id),
-            )
-        }
+        val aheadChapterIds = (1..aheadCount)
+            .mapNotNull { offset -> chapters.getOrNull(c.orderIndex + offset)?.id }
+            .toLongArray()
+        context.startService(
+            Intent(context, TtsGenerationService::class.java)
+                .setAction(TtsGenerationService.ACTION_SET_LOW_PRIORITY_CHAPTERS)
+                .putExtra(TtsGenerationService.EXTRA_CHAPTER_IDS, aheadChapterIds),
+        )
     }
 
     LaunchedEffect(chapterId, chapter, book) {

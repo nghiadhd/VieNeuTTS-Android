@@ -158,14 +158,19 @@ class BookRepository(private val context: Context) {
     /** Changing a book's voice invalidates all of its generated audio — a book never mixes two voices. */
     suspend fun setVoiceOverride(bookId: Long, voice: String?) = withContext(Dispatchers.IO) {
         val book = bookDao.get(bookId) ?: return@withContext
+        Log.i("VoiceDebug", "setVoiceOverride bookId=$bookId old=${book.voiceOverride} new=$voice")
         bookDao.updateVoiceOverride(bookId, voice)
         sentenceDao.resetAllForBook(bookId)
         for (chapter in chapterDao.getForBook(bookId)) {
-            audioDir(book.folderId, chapter.orderIndex).listFiles()?.forEach { it.delete() }
+            audioDir(book.folderId, chapter.orderIndex).listFiles()?.forEach { file ->
+                if (!file.delete()) Log.w("VoiceDebug", "setVoiceOverride: failed to delete stale audio file ${file.absolutePath}")
+            }
             chapterDao.clearAudioBytes(chapter.id)
             syncChapterMetadata(book.folderId, chapter, sentenceDao.getForChapter(chapter.id))
         }
         writeBookMetadata(book.copy(voiceOverride = voice))
+        val persisted = bookDao.get(bookId)?.voiceOverride
+        Log.i("VoiceDebug", "setVoiceOverride bookId=$bookId persisted read-back voiceOverride=$persisted")
     }
 
     /** Per-book display prefs — unlike [setVoiceOverride], these never affect generated audio. */

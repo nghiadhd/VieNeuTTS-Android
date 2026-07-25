@@ -2,6 +2,7 @@
 
 package com.vieneu.reader.ui
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -36,6 +38,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.vieneu.reader.ReaderApp
 import com.vieneu.reader.data.Chapter
+import com.vieneu.reader.generation.GenerationStatus
+import com.vieneu.reader.generation.TtsGenerationService
 import kotlinx.coroutines.launch
 
 @Composable
@@ -46,6 +50,7 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
     val book by app.repository.observeBook(bookId).collectAsState(initial = null)
     val chapters by app.repository.observeChapters(bookId).collectAsState(initial = emptyList())
     val generatedCounts by app.repository.observeGeneratedCounts(bookId).collectAsState(initial = emptyMap())
+    val generationStatus by GenerationStatus.state.collectAsState()
     var progress by remember { mutableStateOf(0 to 0) }
 
     LaunchedEffect(bookId, chapters) {
@@ -57,6 +62,14 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
             TopAppBar(
                 title = { Text(book?.title ?: "") },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "Quay lại") } },
+                actions = {
+                    val hasActiveWork = generationStatus.activeChapterId != null || generationStatus.queuedChapterIds.isNotEmpty()
+                    if (hasActiveWork) {
+                        IconButton(
+                            onClick = { context.startService(Intent(context, TtsGenerationService::class.java).setAction(TtsGenerationService.ACTION_STOP_ALL)) },
+                        ) { Icon(Icons.Filled.Stop, contentDescription = "Dừng tất cả việc tạo giọng đọc") }
+                    }
+                },
             )
         },
     ) { padding ->
@@ -91,17 +104,27 @@ fun BookDetailScreen(bookId: Long, onBack: () -> Unit, onOpenChapter: (Long) -> 
                         else -> 0
                     }
                     val generatedCount = generatedCounts[chapter.id] ?: 0
+                    val queuePosition = generationStatus.queuedChapterIds.indexOf(chapter.id).takeIf { it >= 0 }
                     ChapterRow(
                         chapter,
                         isCurrent = chapter.orderIndex == book?.lastChapterIndex,
                         listenPercent = listenPercent,
                         generatedCount = generatedCount,
+                        isActivelyGenerating = generationStatus.activeChapterId == chapter.id,
+                        queuePosition = queuePosition,
                         onClick = { onOpenChapter(chapter.id) },
                         onDeleteAudio = {
                             scope.launch {
                                 app.repository.deleteChapterAudio(chapter.id)
                                 app.player.notifyChapterAudioCleared(chapter.id)
                             }
+                        },
+                        onStopGenerating = {
+                            context.startService(
+                                Intent(context, TtsGenerationService::class.java)
+                                    .setAction(TtsGenerationService.ACTION_STOP_CHAPTER)
+                                    .putExtra(TtsGenerationService.EXTRA_CHAPTER_ID, chapter.id),
+                            )
                         },
                     )
                 }
@@ -116,15 +139,20 @@ private fun ChapterRow(
     isCurrent: Boolean,
     listenPercent: Int,
     generatedCount: Int,
+    isActivelyGenerating: Boolean,
+    queuePosition: Int?,
     onClick: () -> Unit,
     onDeleteAudio: () -> Unit,
+    onStopGenerating: () -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
     val genStatus = when {
         chapter.sentenceCount == 0 -> "—"
         generatedCount >= chapter.sentenceCount -> "Đã tạo xong"
+        isActivelyGenerating -> "Đang tạo ${(generatedCount * 100) / chapter.sentenceCount}%"
+        queuePosition != null -> "Đang chờ (#${queuePosition + 1} trong hàng đợi)"
         generatedCount == 0 -> "Chưa tạo giọng"
-        else -> "Đang tạo ${(generatedCount * 100) / chapter.sentenceCount}%"
+        else -> "Tạm dừng ở ${(generatedCount * 100) / chapter.sentenceCount}%"
     }
 
     Card(modifier = Modifier.fillMaxWidth(), onClick = onClick) {
@@ -138,6 +166,11 @@ private fun ChapterRow(
                 )
             }
             if (isCurrent) Text("●", color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(end = 8.dp))
+            if (isActivelyGenerating || queuePosition != null) {
+                IconButton(onClick = onStopGenerating) {
+                    Icon(Icons.Filled.Stop, contentDescription = "Dừng tạo giọng đọc cho chương này")
+                }
+            }
             IconButton(onClick = { confirmDelete = true }) {
                 Icon(Icons.Filled.Delete, contentDescription = "Xóa giọng đọc đã tạo cho chương này")
             }
