@@ -64,7 +64,11 @@ fun ListenScreen(bookId: Long, chapterId: Long, onBack: () -> Unit, onOpenBookSe
     // pregenerateChaptersAhead, configurable in AppSettingsScreen's Performance section) —
     // design spec §2/§4. A replace, not an append: otherwise every chapter ever opened during a
     // reading session stays queued forever, competing with wherever the reader actually is now.
-    LaunchedEffect(chapterId, chapter, settings?.pregenerateChaptersAhead) {
+    // Keyed on chapter?.orderIndex, not the whole Chapter object: Chapter.audioBytes increments
+    // on every single sentence generated (see BookRepository.markGenerated), so keying on the
+    // full object would restart this effect — and re-send both intents — on every sentence
+    // instead of only when the reader actually opens a different chapter.
+    LaunchedEffect(chapterId, chapter?.orderIndex, settings?.pregenerateChaptersAhead) {
         val c = chapter ?: return@LaunchedEffect // chapters Flow hasn't loaded yet; wait for it
         context.startService(
             Intent(context, TtsGenerationService::class.java)
